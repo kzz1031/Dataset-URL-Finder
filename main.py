@@ -5,7 +5,7 @@ import os
 import sys
 from process_pdf_url import download_and_process_pdf
 
-api_key = 'sk-7249b1c247fb48808f8e8bb61f897919'
+api_key = ''
 chat = ChatOpenAI(
     model='deepseek-chat',
     openai_api_key=api_key,
@@ -21,7 +21,6 @@ def process_url_to_md(url):
     
     pdf_path = download_and_process_pdf(url, output_dir)
     md_filename = os.path.splitext(os.path.basename(pdf_path))[0]
-    
     md_path = os.path.join(output_dir, md_filename, 'auto', md_filename + '.md') # change 'auto' if you use other method in process_pdf_url.py
     
     if not os.path.exists(md_path):
