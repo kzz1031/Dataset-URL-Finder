@@ -30,7 +30,7 @@ if __name__ == "__main__":
         sys.exit(1)
     
     url = sys.argv[1]
-    output_dir = 'output' if sys.argv[2] is None else sys.argv[2]
+    output_dir = 'output'
     
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
