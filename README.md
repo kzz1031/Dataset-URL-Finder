@@ -1,11 +1,17 @@
-- MinerU intallation
+# MinerU intallation
 
-Follow the instruction in the link below to install MinerU
+1. Follow the instruction in the link below to install MinerU
 
 https://mineru.readthedocs.io/en/latest/user_guide/install/install.html
 
-- conda environment
-Export conda environment from environment.yml
+2. Prepare the environment using conda or venv:
+
+```sh
+conda env create -f environment.yaml
 ```
-conda env create -f environment.yml
+
+or:
+
+```sh
+./install.sh
 ```
