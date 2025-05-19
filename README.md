@@ -1,4 +1,4 @@
-# MinerU intallation
+# Preparations
 
 1. Follow the instruction in the link below to install MinerU
 
@@ -15,3 +15,5 @@ or:
 ```sh
 ./install.sh
 ```
+
+3. Directly put your apikey in apikey.txt in the root dir.

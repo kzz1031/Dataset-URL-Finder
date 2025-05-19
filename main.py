@@ -6,6 +6,12 @@ import sys
 from process_pdf_url import download_and_process_pdf
 
 api_key = ''
+with open('apikey.txt', 'r') as f:
+    api_key = f.read().strip()
+if not api_key:
+    print("Deepseek API key not found. Please set your OpenAI API key in apikey.txt.")
+    sys.exit(1)
+
 chat = ChatOpenAI(
     model='deepseek-chat',
     openai_api_key=api_key,

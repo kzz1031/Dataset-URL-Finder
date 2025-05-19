@@ -25,12 +25,12 @@ def download_and_process_pdf(url, output_dir):
     return local_path
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: python script.py <url> <output_dir>")
+    if len(sys.argv) < 2:
+        print("Usage: python process_pdf_url.py <url> <output_dir>")
         sys.exit(1)
     
     url = sys.argv[1]
-    output_dir = sys.argv[2]
+    output_dir = 'output' if sys.argv[2] is None else sys.argv[2]
     
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
