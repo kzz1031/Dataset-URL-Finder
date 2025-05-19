@@ -3,7 +3,7 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.document_loaders import TextLoader
 import os
 import sys
-from process_pdf_url import download_and_process_pdf
+from url2md import process_url_to_md
 
 api_key = ''
 with open('apikey.txt', 'r') as f:
@@ -18,25 +18,6 @@ chat = ChatOpenAI(
     openai_api_base='https://api.deepseek.com',
     max_tokens=1024
 )
-
-def process_url_to_md(url):
-    print(f"Processing URL: {url}")
-    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    
-    pdf_path = download_and_process_pdf(url, output_dir)
-    md_filename = os.path.splitext(os.path.basename(pdf_path))[0]
-    md_path = os.path.join(output_dir, md_filename, 'auto', md_filename + '.md') # change 'auto' if you use other method in process_pdf_url.py
-    
-    if not os.path.exists(md_path):
-        print(f"MD file not found in: {md_path}")
-        return None
-    
-    with open(md_path, 'r', encoding='utf-8') as f:
-        md_content = f.read()
-    
-    return md_content
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
