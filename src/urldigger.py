@@ -1,5 +1,6 @@
 import re
 from chat_manager import chat_inst
+from tqdm import tqdm
 
 def extract_urls(text):
     # Regular expression for high confidence URLs (with http/https or www prefix)
@@ -42,7 +43,8 @@ def filter_possible_urls(possible_urls):
         return filtered_urls
     
     # Process each URL individually
-    for url in possible_urls:
+    print('Validating possible URLs...')
+    for url in tqdm(possible_urls):
         # Create a prompt for the AI to validate a single URL
         prompt = f"""Is this string a valid URL that may contain a dataset and can be directly accessed by the browser? The string is '{url}'.
         Please respond with just 'VALID' or 'INVALID' and no other explanation."""
@@ -56,10 +58,10 @@ def filter_possible_urls(possible_urls):
                 # Check if the response indicates the URL is valid
                 if 'VALID' == response_text.upper():
                     filtered_urls.append(url)
-                    print(f"URL validated: {url}")
+                    # print(f"URL validated: {url}")
                     break
                 elif 'INVALID' == response_text.upper():
-                    print(f"URL rejected: {url}")
+                    # print(f"URL rejected: {url}")
                     break
         except Exception as e:
             print(f"Error validating URL '{url}': {e}")
@@ -83,6 +85,44 @@ def dig_urls_from_text(text):
     return high_confidence_urls + filtered_urls
 
 
+def dig_context_of_urls(text, urls):
+    from config import CONTEXT_LENGTH  # Context Window Length: 2 * CONTEXT_LENGTH
+    
+    url_context_dict = {}
+    
+    for url in urls:
+        # Find all occurrences of the URL in the text
+        url_positions = [m.start() for m in re.finditer(re.escape(url), text)]
+        
+        contexts = []
+        for pos in url_positions:
+            # Calculate start and end positions for the context window
+            start_pos = max(0, pos - CONTEXT_LENGTH)
+            end_pos = min(len(text), pos + len(url) + CONTEXT_LENGTH)
+            
+            # Extract the context
+            context = text[start_pos:end_pos]
+            
+            # Add markers to show where the URL is in the context
+            if start_pos > 0:
+                context = "..." + context
+            if end_pos < len(text):
+                context = context + "..."
+                
+            contexts.append(context)
+        
+        # Store all contexts for this URL
+        if contexts:
+            url_context_dict[url] = contexts
+    
+    return url_context_dict
+
 if __name__ == "__main__":
     filepath = 'src/output/attachment?id=aVh9KRZdRk&name=pdf/auto/attachment?id=aVh9KRZdRk&name=pdf.md'
-    print(dig_urls_from_file(filepath))
+    content = ''
+    with open(filepath, 'r') as file:
+        content = file.read()
+    urls = dig_urls_from_file(filepath)
+    url_to_context = dig_context_of_urls(content, urls)
+    from pprint import pprint
+    pprint(url_to_context)
