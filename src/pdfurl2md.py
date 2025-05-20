@@ -2,9 +2,9 @@ import os
 import sys
 import requests
 import subprocess
-### You need to install magic-pdf first ###
+
+
 def download_and_process_pdf(url, output_dir):
-    # Extract filename from URL
     filename = url.split('/')[-1]
     if not filename.endswith('.pdf'):
         filename = f"{filename}.pdf"
@@ -24,7 +24,7 @@ def download_and_process_pdf(url, output_dir):
     
     return local_path
 
-def process_url_to_md(url):
+def process_pdf_url_to_md(url):
     print(f"Processing URL: {url}")
     output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
     if not os.path.exists(output_dir):
