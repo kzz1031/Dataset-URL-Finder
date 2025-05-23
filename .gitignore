@@ -4,3 +4,4 @@ venv
 **/.vscode
 apikey.txt
 papers
+__init__.py
