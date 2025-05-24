@@ -5,6 +5,9 @@ from chat_manager import chat_inst
 from tqdm import tqdm
 import time
 import re
+import sys
+import os
+import traceback
 
 def check_url_with_llm(url, context):
     """使用LLM检查URL是否为数据集，返回0-5的分数和详细信息"""
@@ -271,3 +274,110 @@ def verify_urls(urls, url_context_dict=None, threshold=6):
             unique_urls.append(url_info)
     
     return unique_urls
+
+def test_urlprober():
+    """运行URL验证系统的测试"""
+    print("=== Starting URL Prober Tests ===")
+    print(f"Python version: {sys.version}")
+    print(f"Current working directory: {os.getcwd()}")
+    
+    try:
+        # 测试单个URL
+        print("\n=== Starting Single URL Test ===")
+        test_url = "https://huggingface.co/datasets/mnist"
+        test_context = "The MNIST dataset is a large database of handwritten digits that is commonly used for training various image processing systems."
+        
+        print(f"\n1. Input Information:")
+        print(f"URL: {test_url}")
+        print(f"Context: {test_context}")
+        
+        # 测试LLM检查
+        print("\n2. Starting LLM check...")
+        try:
+            llm_score, llm_details = check_url_with_llm(test_url, test_context)
+            print(f"LLM Score: {llm_score}/5")
+            print(f"LLM Details: {llm_details}")
+        except Exception as e:
+            print(f"Error in LLM check: {str(e)}")
+            print("Stack trace:")
+            traceback.print_exc()
+        
+        # 测试URL可访问性检查
+        print("\n3. Starting URL accessibility check...")
+        try:
+            access_score, details = check_url_accessibility(test_url)
+            print(f"Accessibility Score: {access_score}/5")
+            print(f"Details: {details}")
+        except Exception as e:
+            print(f"Error in accessibility check: {str(e)}")
+            print("Stack trace:")
+            traceback.print_exc()
+        
+        # 测试完整验证
+        print("\n4. Starting complete verification...")
+        try:
+            results = verify_urls([test_url], {test_url: [test_context]})
+            print("\nFinal Results:")
+            if results:
+                for result in results:
+                    print(f"\nURL: {result['url']}")
+                    print(f"Total Score: {result['score']}/10")
+                    print(f"LLM Score: {result['llm_score']}/5")
+                    print(f"Access Score: {result['access_score']}/5")
+                    print(f"Access Details: {result['access_details']}")
+                    print(f"LLM Details: {result['llm_details']}")
+            else:
+                print("No results returned from verify_urls")
+        except Exception as e:
+            print(f"Error in complete verification: {str(e)}")
+            print("Stack trace:")
+            traceback.print_exc()
+        
+        # 测试多个URL
+        print("\n=== Starting Multiple URLs Test ===")
+        test_urls = [
+            "https://huggingface.co/datasets/mnist",  # 数据集
+            "https://www.cs.toronto.edu/~kriz/cifar.html",     # 数据集
+            "https://github.com/kzz1031/Dataset-URL-Finder"   # 项目主页
+        ]
+        
+        test_contexts = {
+            test_urls[0]: ["The MNIST dataset is a large database of handwritten digits."],
+            test_urls[1]: ["PyTorch is a machine learning framework."],
+            test_urls[2]: ["MNIST dataset on Kaggle platform."]
+        }
+        
+        print("\n1. Input Information:")
+        print("URLs to test:")
+        for url in test_urls:
+            print(f"- {url}")
+        
+        print("\n2. Starting verification of multiple URLs...")
+        try:
+            results = verify_urls(test_urls, test_contexts, 0)
+            
+            print("\nResults for all URLs:")
+            if results:
+                for result in results:
+                    print(f"\nURL: {result['url']}")
+                    print(f"Total Score: {result['score']}/10")
+                    print(f"LLM Score: {result['llm_score']}/5")
+                    print(f"Access Score: {result['access_score']}/5")
+                    print(f"Access Details: {result['access_details']}")
+                    print(f"LLM Details: {result['llm_details']}")
+            else:
+                print("No results returned from verify_urls")
+        except Exception as e:
+            print(f"Error in multiple URLs verification: {str(e)}")
+            print("Stack trace:")
+            traceback.print_exc()
+            
+    except Exception as e:
+        print(f"Unexpected error in tests: {str(e)}")
+        print("Stack trace:")
+        traceback.print_exc()
+    
+    print("\n=== Tests Completed ===")
+
+if __name__ == "__main__":
+    test_urlprober()
