@@ -1,7 +1,7 @@
 import os
 import sys
 from pdfurl2md import process_pdf_url_to_md
-from urldigger import dig_urls_from_text, dig_context_of_urls
+from urldigger import dig_urls_from_text, dig_context_of_urls, gather_texts
 from urlprober import verify_urls
 import json
 
@@ -19,13 +19,16 @@ def saveJson(filePath: str, datas: list) -> None:
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python src/main.py <pdf_url>")
+        print("Usage: python src/main.py <pdf_url> [language]")
         sys.exit(1)
     
     pdf_url = sys.argv[1]
-    md_content = process_pdf_url_to_md(pdf_url)
-    urls = dig_urls_from_text(md_content)
-    url_context_dict = dig_context_of_urls(md_content, urls)
+    lang = sys.argv[2] if len(sys.argv) > 2 else 'en'  # Default to English
+    
+    outdir, mdname = process_pdf_url_to_md(pdf_url, lang)
+    texts = gather_texts(outdir, mdname)
+    urls = dig_urls_from_text(texts)
+    url_context_dict = dig_context_of_urls(texts, urls)
     
     # 验证URL并保存结果
     verified_urls = verify_urls(urls, url_context_dict)

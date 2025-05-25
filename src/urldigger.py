@@ -19,9 +19,17 @@ def extract_urls(text):
     possible_urls = [url.strip(',') for url in possible_urls if url.strip()]
     possible_urls = [url.strip(')') for url in possible_urls if url.strip()]
     possible_urls = [url.strip('.') for url in possible_urls if url.strip()]
+    possible_urls = [url.strip('"') for url in possible_urls if url.strip()]
     possible_urls = list(set(possible_urls))
-    possible_urls = [url for url in possible_urls if not url.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff'))]
-    
+    possible_urls = [url for url in possible_urls if not url.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', ')'))]
+    # not matching \d+\.\d+
+    possible_urls = [url for url in possible_urls if not re.match(r'\d+\.\d+', url)]
+    # not matching ^.*\.$
+    possible_urls = [url for url in possible_urls if not re.match(r'^.*\.$', url)]
+    # not matching ^.*\."$
+    # possible_urls = [url for url in possible_urls if not re.match(r'^.*\."$', url)]
+    # not matching ^.*\.jpg"$
+    # possible_urls = [url for url in possible_urls if not re.match(r'^.*\.jpg"$', url)]
     
     return high_confidence_urls, possible_urls
 
@@ -37,6 +45,7 @@ def extract_urls_from_file(file_path):
 
 def filter_possible_urls(possible_urls):
     # Use chat_inst to filter possible URLs
+    print(possible_urls)
     filtered_urls = []
     
     if not possible_urls:
@@ -77,8 +86,20 @@ def dig_urls_from_file(file_path):
     return high_confidence_urls + filtered_urls
 
 
-def dig_urls_from_text(text):
-    high_confidence_urls, possible_urls = extract_urls(text)
+def gather_texts(outdir, mdname):
+    text = ''
+    with open(outdir + '/' + mdname + '.md', 'r') as file:
+        text = file.read()
+    with open(outdir + '/' + mdname + '_middle.json', 'r') as file:
+        text += file.read()
+    with open(outdir + '/' + mdname + '_content_list.json', 'r') as file:
+        text += file.read()
+    with open(outdir + '/' + mdname + '_model.json', 'r') as file:
+        text += file.read()
+    return text
+
+def dig_urls_from_text(texts):
+    high_confidence_urls, possible_urls = extract_urls(texts)
     
     filtered_urls = filter_possible_urls(possible_urls)
     
@@ -118,11 +139,10 @@ def dig_context_of_urls(text, urls):
     return url_context_dict
 
 if __name__ == "__main__":
-    filepath = 'src/output/attachment?id=aVh9KRZdRk&name=pdf/auto/attachment?id=aVh9KRZdRk&name=pdf.md'
-    content = ''
-    with open(filepath, 'r') as file:
-        content = file.read()
-    urls = dig_urls_from_file(filepath)
-    url_to_context = dig_context_of_urls(content, urls)
+    outdir = 'output/C4NbtYnyQg/auto'
+    mdname = 'C4NbtYnyQg'
+    texts = gather_texts(outdir, mdname)
+    urls = dig_urls_from_text(texts)
+    url_to_context = dig_context_of_urls(texts, urls)
     from pprint import pprint
     pprint(url_to_context)
