@@ -1,4 +1,5 @@
 import re
+import os
 from chat_manager import chat_inst
 from tqdm import tqdm
 
@@ -90,12 +91,15 @@ def gather_texts(outdir, mdname):
     text = ''
     with open(outdir + '/' + mdname + '.md', 'r') as file:
         text = file.read()
-    with open(outdir + '/' + mdname + '_middle.json', 'r') as file:
-        text += file.read()
-    with open(outdir + '/' + mdname + '_content_list.json', 'r') as file:
-        text += file.read()
-    with open(outdir + '/' + mdname + '_model.json', 'r') as file:
-        text += file.read()
+    if os.path.exists(outdir + '/' + mdname + '_middle.json'):
+        with open(outdir + '/' + mdname + '_middle.json', 'r') as file:
+            text += file.read()
+    if os.path.exists(outdir + '/' + mdname + '_content_list.json'):
+        with open(outdir + '/' + mdname + '_content_list.json', 'r') as file:
+            text += file.read()
+    if os.path.exists(outdir + '/' + mdname + '_content.json'):
+        with open(outdir + '/' + mdname + '_model.json', 'r') as file:
+            text += file.read()
     return text
 
 def dig_urls_from_text(texts):
