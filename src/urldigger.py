@@ -23,14 +23,8 @@ def extract_urls(text):
     possible_urls = [url.strip('"') for url in possible_urls if url.strip()]
     possible_urls = list(set(possible_urls))
     possible_urls = [url for url in possible_urls if not url.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', ')'))]
-    # not matching \d+\.\d+
     possible_urls = [url for url in possible_urls if not re.match(r'\d+\.\d+', url)]
-    # not matching ^.*\.$
     possible_urls = [url for url in possible_urls if not re.match(r'^.*\.$', url)]
-    # not matching ^.*\."$
-    # possible_urls = [url for url in possible_urls if not re.match(r'^.*\."$', url)]
-    # not matching ^.*\.jpg"$
-    # possible_urls = [url for url in possible_urls if not re.match(r'^.*\.jpg"$', url)]
     
     return high_confidence_urls, possible_urls
 
