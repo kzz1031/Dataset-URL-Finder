@@ -2,6 +2,8 @@ import os
 import sys
 import requests
 import subprocess
+import fitz  # PyMuPDF
+import hashlib
 
 
 def pdf2md(pdf_path, output_dir, lang='en'):
@@ -48,6 +50,26 @@ def process_pdf_url_to_md(url, lang='en'):
     pdf_path = download_and_process_pdf(url, output_dir, lang)
     md_filename = os.path.splitext(os.path.basename(pdf_path))[0]
     md_path = os.path.join(output_dir, md_filename, 'auto', md_filename + '.md') # change 'auto' if you use other method in process_pdf_url.py
+    
+    if not os.path.exists(md_path):
+        print(f"MD file not found in: {md_path}")
+        return None
+    
+    return os.path.join(output_dir, md_filename, 'auto'), md_filename
+
+def process_pdf_file_to_md(pdf_path: str, lang: str) -> tuple:
+    if not os.path.exists(pdf_path):
+        raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+    
+    print(f"Processing local PDF file: {pdf_path}")
+    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    pdf2md(pdf_path, output_dir, lang)
+    
+    md_filename = os.path.splitext(os.path.basename(pdf_path))[0]
+    md_path = os.path.join(output_dir, md_filename, 'auto', md_filename + '.md')  
     
     if not os.path.exists(md_path):
         print(f"MD file not found in: {md_path}")

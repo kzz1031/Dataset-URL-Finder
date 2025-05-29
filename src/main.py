@@ -1,6 +1,7 @@
 import os
 import sys
 from pdfurl2md import process_pdf_url_to_md
+from pdfurl2md import process_pdf_file_to_md  # 新增导入
 from urldigger import dig_urls_from_text, dig_context_of_urls, gather_texts
 from urlprober import verify_urls
 import json
@@ -18,14 +19,24 @@ def saveJson(filePath: str, datas: list) -> None:
         print(f"Error writing to file {filePath}: {e}")
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python src/main.py <pdf_url> [language]")
+    if len(sys.argv) < 3:
+        print("Usage: python src/main.py <mode> <input> [language]")
+        print("Modes: url - Process a PDF from a URL")
+        print("       file - Process a local PDF file")
         sys.exit(1)
     
-    pdf_url = sys.argv[1]
-    lang = sys.argv[2] if len(sys.argv) > 2 else 'en'  # Default to English
+    mode = sys.argv[1]
+    input_path = sys.argv[2]
+    lang = sys.argv[3] if len(sys.argv) > 3 else 'en'  # Default to English
     
-    outdir, mdname = process_pdf_url_to_md(pdf_url, lang)
+    if mode == "url":
+        outdir, mdname = process_pdf_url_to_md(input_path, lang)
+    elif mode == "file":
+        outdir, mdname = process_pdf_file_to_md(input_path, lang)
+    else:
+        print("Invalid mode. Use 'url' or 'file'.")
+        sys.exit(1)
+    
     texts = gather_texts(outdir, mdname)
     urls = dig_urls_from_text(texts)
     url_context_dict = dig_context_of_urls(texts, urls)
