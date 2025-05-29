@@ -76,17 +76,31 @@ def check_url_accessibility(url):
     try:
         # 1. 检查URL是否可访问
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0'
         }
         
         try:
             response = requests.head(url, allow_redirects=True, timeout=10, headers=headers)
         except requests.exceptions.RequestException as e:
-            return 0, {
-                "status": "error",
-                "message": f"Request failed: {str(e)}",
-                "details": "URL is completely inaccessible"
-            }
+            # 如果HEAD请求失败，尝试GET请求
+            try:
+                response = requests.get(url, timeout=10, headers=headers)
+            except requests.exceptions.RequestException as e:
+                return 0, {
+                    "status": "error",
+                    "message": f"Request failed: {str(e)}",
+                    "details": "URL is completely inaccessible"
+                }
         
         # 检查特殊状态码
         if response.status_code == 403:
@@ -130,34 +144,39 @@ def check_url_accessibility(url):
         
         # 4. 检查页面特征
         dataset_indicators = {
-            'download': {
-                'keywords': ['download', 'dataset', 'data', 'benchmark'],
-                'weight': 0.3,
-                'context_required': True
-            },
-            'github': {
-                'keywords': ['github.com', 'dataset', 'data'],
-                'weight': 0.4,
-                'context_required': True
-            },
             'huggingface': {
                 'keywords': ['huggingface.co/datasets'],
-                'weight': 0.8,
+                'weight': 4.0,
                 'context_required': False
             },
             'kaggle': {
                 'keywords': ['kaggle.com/datasets'],
-                'weight': 0.8,
+                'weight': 4.0,
                 'context_required': False
+            },
+            'dataset': {
+                'keywords': ['dataset', 'datasets', 'data set', 'data sets'],
+                'weight': 3.5,
+                'context_required': False
+            },
+            'download': {
+                'keywords': ['download', 'download data', 'download dataset'],
+                'weight': 3.0,
+                'context_required': False
+            },
+            'github': {
+                'keywords': ['github.com', 'dataset', 'data'],
+                'weight': 2.5,
+                'context_required': True
             },
             'government': {
                 'keywords': ['census.gov', 'data.gov', 'nasa.gov/data'],
-                'weight': 0.6,
+                'weight': 3.0,
                 'context_required': True
             },
             'academic': {
                 'keywords': ['.edu/data', '.edu/dataset', '.edu/benchmark'],
-                'weight': 0.7,
+                'weight': 2.5,
                 'context_required': True
             }
         }
@@ -170,7 +189,7 @@ def check_url_accessibility(url):
         for platform, info in dataset_indicators.items():
             if any(keyword in url_lower for keyword in info['keywords']):
                 if not info['context_required'] or any(keyword in url_lower for keyword in ['dataset', 'data', 'benchmark']):
-                    url_score += info['weight']
+                    url_score = max(url_score, info['weight'])  # 使用最高权重而不是累加
                     url_details.append(f"URL matches {platform} pattern")
         
         # 检查页面内容特征
@@ -181,30 +200,30 @@ def check_url_accessibility(url):
         # 数据集相关关键词及其权重
         content_indicators = {
             'dataset_mention': {
-                'keywords': ['dataset', 'benchmark', 'data collection'],
-                'weight': 0.4
+                'keywords': ['dataset', 'benchmark', 'data collection', 'data repository'],
+                'weight': 3.0
             },
             'download_info': {
-                'keywords': ['download data', 'data files', 'data repository'],
-                'weight': 0.3
+                'keywords': ['download data', 'data files', 'data repository', 'download dataset'],
+                'weight': 2.5
             },
             'data_format': {
                 'keywords': ['format', 'structure', 'schema', 'csv', 'json', 'parquet'],
-                'weight': 0.2
+                'weight': 1.5
             },
             'access_info': {
                 'keywords': ['access restricted', 'login required', 'registration required'],
-                'weight': 0.1
+                'weight': 1.0
             }
         }
         
         for category, info in content_indicators.items():
             if any(keyword in page_text for keyword in info['keywords']):
-                content_score += info['weight']
+                content_score = max(content_score, info['weight'])  # 使用最高权重而不是累加
                 content_details.append(f"Page contains {category} information")
         
-        # 计算总分
-        total_score = min(url_score + content_score, 5)
+        # 计算总分（取URL分数和内容分数的最大值，但不超过5）
+        total_score = min(max(url_score, content_score), 5)
         
         return total_score, {
             "status": "success",
@@ -224,20 +243,103 @@ def check_url_accessibility(url):
             "details": "An unexpected error occurred during URL checking"
         }
 
-def verify_urls(urls, url_context_dict=None, threshold=6):
+def calculate_url_similarity(url1, url2):
+    """计算两个URL的相似度"""
+    # 将URL转换为小写并去除末尾的斜杠
+    url1 = url1.lower().rstrip('/')
+    url2 = url2.lower().rstrip('/')
+    
+    # 如果两个URL完全相同，直接返回1.0
+    if url1 == url2:
+        return 1.0
+    
+    # 计算最长公共子序列
+    def lcs(s1, s2):
+        m, n = len(s1), len(s2)
+        dp = [[0] * (n + 1) for _ in range(m + 1)]
+        for i in range(1, m + 1):
+            for j in range(1, n + 1):
+                if s1[i-1] == s2[j-1]:
+                    dp[i][j] = dp[i-1][j-1] + 1
+                else:
+                    dp[i][j] = max(dp[i-1][j], dp[i][j-1])
+        return dp[m][n]
+    
+    # 计算相似度
+    common_length = lcs(url1, url2)
+    max_length = max(len(url1), len(url2))
+    similarity = common_length / max_length
+    
+    return similarity
+
+def check_url_duplicate(url1, url2):
+    """使用AI检查两个URL是否指向相同的内容"""
+    prompt = f"""Given these two URLs:
+URL1: {url1}
+URL2: {url2}
+
+Please determine if these URLs point to the same content or resource. Consider:
+1. Are they different versions of the same page?
+2. Do they redirect to the same destination?
+3. Are they different formats of the same dataset?
+4. Are they different mirrors of the same content?
+
+Respond with just 'DUPLICATE' or 'DIFFERENT' and no other explanation."""
+
+    try:
+        response = chat_inst.invoke(prompt)
+        response_text = response.content.strip().upper()
+        return response_text == 'DUPLICATE'
+    except Exception as e:
+        print(f"Error checking URL duplicate: {e}")
+        return False
+
+def verify_urls(urls, url_context_dict=None, threshold=5, similarity_threshold=0.8):
     """
     验证URL列表，返回得分超过阈值的URL
     Args:
         urls: URL列表
         url_context_dict: URL到上下文的映射字典
         threshold: 分数阈值（0-10）
+        similarity_threshold: URL相似度阈值（0-1）
     Returns:
         list: 包含验证通过的URL信息的列表，每个元素是一个字典
     """
+    # 在验证前进行URL去重
+    unique_urls = []
+    seen_urls = set()
+    duplicates = set()  # 将duplicates移到函数开头
+    
+    print("Checking for duplicate URLs...")
+    # 计算所有URL对之间的相似度
+    similar_pairs = []
+    for i in range(len(urls)):
+        for j in range(i + 1, len(urls)):
+            similarity = calculate_url_similarity(urls[i], urls[j])
+            if similarity >= similarity_threshold:
+                similar_pairs.append((urls[i], urls[j], similarity))
+    
+    # 使用AI确认重复
+    if similar_pairs:
+        print(f"Found {len(similar_pairs)} potential duplicate URL pairs, checking with AI...")
+        for url1, url2, similarity in tqdm(similar_pairs):
+            if check_url_duplicate(url1, url2):
+                # 保留较短的URL
+                duplicates.add(url1 if len(url1) > len(url2) else url2)
+    
+    # 构建去重后的URL列表
+    for url in urls:
+        url_lower = url.lower().rstrip('/')
+        if url_lower not in seen_urls and url not in duplicates:
+            seen_urls.add(url_lower)
+            unique_urls.append(url)
+    
+    print(f"Found {len(urls)} URLs, {len(unique_urls)} unique URLs after deduplication")
+    
     verified_urls = []
     
     print("Verifying URLs...")
-    for url in tqdm(urls):
+    for url in tqdm(unique_urls):
         # 获取URL的上下文
         context = url_context_dict.get(url, [""])[0] if url_context_dict else ""
         
@@ -248,8 +350,9 @@ def verify_urls(urls, url_context_dict=None, threshold=6):
         access_score, access_details = check_url_accessibility(url)
         
         # 计算总分
-        total_score = llm_score + access_score
-        
+        total_score = llm_score*1.2 + access_score*0.8
+
+        print(f"URL: {url}, Total Score: {total_score}/10, LLM Score: {llm_score}/5, Access Score: {access_score}/5")
         # 如果总分超过阈值，添加到已验证URL列表
         if total_score >= threshold:
             verified_urls.append({
@@ -265,15 +368,10 @@ def verify_urls(urls, url_context_dict=None, threshold=6):
         # 添加延迟以避免请求过快
         time.sleep(1)
     
-    # 去重处理
-    unique_urls = []
-    seen_urls = set()
-    for url_info in verified_urls:
-        if url_info['url'] not in seen_urls:
-            seen_urls.add(url_info['url'])
-            unique_urls.append(url_info)
+    # 按score降序排序verified_urls
+    verified_urls.sort(key=lambda x: x['score'], reverse=True)
     
-    return unique_urls
+    return verified_urls
 
 def test_urlprober():
     """运行URL验证系统的测试"""
