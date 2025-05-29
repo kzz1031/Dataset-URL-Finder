@@ -71,9 +71,30 @@ def check_url_with_llm(url, context):
             "details": "Failed to analyze URL with LLM"
         }
 
+def clean_url(url):
+    """清理URL，移除末尾的特殊字符和其他问题"""
+    # 移除引号、逗号、点和其他特殊字符
+    url = url.strip()
+    url = url.strip('"').strip(',').strip('.')
+    # 移除URL末尾的引号和逗号
+    url = re.sub(r'[",]+$', '', url)
+    # 移除URL中的转义字符
+    url = url.replace('\\', '')
+    # 移除URL末尾的特殊字符
+    url = url.rstrip('/').rstrip('\\').rstrip('.').rstrip(':').rstrip('?')
+    # 如果URL以点结尾，移除点
+    if url.endswith('.'):
+        url = url[:-1]
+    return url
+
 def check_url_accessibility(url):
     """检查URL的可访问性和内容，返回0-5的分数和详细信息"""
     try:
+        # 清理URL
+        url = clean_url(url)
+        print("cleaned url:")
+        print(url)
+        
         # 1. 检查URL是否可访问
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -222,8 +243,14 @@ def check_url_accessibility(url):
                 content_score = max(content_score, info['weight'])  # 使用最高权重而不是累加
                 content_details.append(f"Page contains {category} information")
         
-        # 计算总分（取URL分数和内容分数的最大值，但不超过5）
-        total_score = min(max(url_score, content_score), 5)
+        # 计算基础分数
+        base_score = min(max(url_score, content_score), 5)
+        
+        # 如果URL可以访问，给予额外加分
+        accessibility_bonus = 2.0 if response.status_code == 200 else 0.0
+        
+        # 计算总分（基础分数 + 可访问性加分，但不超过5）
+        total_score = min(base_score + accessibility_bonus, 5)
         
         return total_score, {
             "status": "success",
@@ -231,6 +258,7 @@ def check_url_accessibility(url):
             "details": {
                 "url_score": url_score,
                 "content_score": content_score,
+                "accessibility_bonus": accessibility_bonus,
                 "url_details": url_details,
                 "content_details": content_details
             }
@@ -243,11 +271,27 @@ def check_url_accessibility(url):
             "details": "An unexpected error occurred during URL checking"
         }
 
+def normalize_url(url):
+    """规范化URL格式"""
+    # 移除引号和逗号
+    url = url.strip('"').strip(',').strip()
+    # 转换为小写
+    url = url.lower()
+    # 移除末尾的斜杠和点
+    url = url.rstrip('/').rstrip('.')
+    # 移除URL参数
+    url = re.sub(r'\?.*$', '', url)
+    # 移除锚点
+    url = re.sub(r'#.*$', '', url)
+    # 移除www前缀
+    url = re.sub(r'^www\.', '', url)
+    return url
+
 def calculate_url_similarity(url1, url2):
     """计算两个URL的相似度"""
-    # 将URL转换为小写并去除末尾的斜杠
-    url1 = url1.lower().rstrip('/')
-    url2 = url2.lower().rstrip('/')
+    # 规范化URL
+    url1 = normalize_url(url1)
+    url2 = normalize_url(url2)
     
     # 如果两个URL完全相同，直接返回1.0
     if url1 == url2:
@@ -294,7 +338,7 @@ Respond with just 'DUPLICATE' or 'DIFFERENT' and no other explanation."""
         print(f"Error checking URL duplicate: {e}")
         return False
 
-def verify_urls(urls, url_context_dict=None, threshold=5, similarity_threshold=0.8):
+def verify_urls(urls, url_context_dict=None, threshold=4, similarity_threshold=0.8):
     """
     验证URL列表，返回得分超过阈值的URL
     Args:
@@ -305,21 +349,83 @@ def verify_urls(urls, url_context_dict=None, threshold=5, similarity_threshold=0
     Returns:
         list: 包含验证通过的URL信息的列表，每个元素是一个字典
     """
-    # 在验证前进行URL去重
-    unique_urls = []
-    seen_urls = set()
-    duplicates = set()  # 将duplicates移到函数开头
+    # URL黑名单关键词
+    blacklist_keywords = [
+        'doi.org',  # DOI链接
+        'proceedings',  # 会议论文集
+        'z-lib',  # Z-Library
+        # 'arxiv.org',  # arXiv论文
+        # 'springer.com',  # Springer出版社
+        # 'ieee.org',  # IEEE
+        # 'acm.org',  # ACM
+        # 'sciencedirect.com',  # ScienceDirect
+        # 'wiley.com',  # Wiley
+        # 'tandfonline.com',  # Taylor & Francis
+        # 'sage.com',  # SAGE
+        # 'mdpi.com',  # MDPI
+        # 'hindawi.com',  # Hindawi
+        # 'frontiersin.org',  # Frontiers
+        # 'researchgate.net',  # ResearchGate
+        # 'scholar.google.com',  # Google Scholar
+        # 'semanticscholar.org',  # Semantic Scholar
+        # 'jstor.org',  # JSTOR
+        # 'sci-hub',  # Sci-Hub
+        # 'libgen',  # Library Genesis
+        
+    ]
     
+    # 过滤掉黑名单中的URL
+    filtered_urls = []
+    blacklisted_urls = []
+    for url in urls:
+        url_lower = url.lower()
+        if any(keyword in url_lower for keyword in blacklist_keywords):
+            blacklisted_urls.append(url)
+        else:
+            filtered_urls.append(url)
+    
+    # if blacklisted_urls:
+    #     print(f"Filtered out {len(blacklisted_urls)} blacklisted URLs:")
+    #     for url in blacklisted_urls:
+    #         print(f"- {url}")
+    
+    # print(len(filtered_urls))
+    # 在验证前进行URL去重
     print("Checking for duplicate URLs...")
-    # 计算所有URL对之间的相似度
+    
+    # 首先规范化所有URL
+    normalized_urls = [(url, normalize_url(url)) for url in filtered_urls]
+    # print(normalized_urls)
+    # 使用字典来存储规范化后的URL到原始URL的映射
+    norm_to_orig = {}
+    for orig_url, norm_url in normalized_urls:
+        if norm_url not in norm_to_orig:
+            norm_to_orig[norm_url] = orig_url
+        else:
+            # 如果发现完全相同的规范化URL，保留较短的原始URL
+            # print(orig_url, norm_url)
+            if len(orig_url) < len(norm_to_orig[norm_url]):
+                norm_to_orig[norm_url] = orig_url
+    
+    # 获取去重后的URL列表
+    unique_urls = list(norm_to_orig.values())
+    
+    print(f"Found {len(filtered_urls)} URLs, {len(unique_urls)} unique URLs after basic deduplication")
+    # print(unique_urls)
+    # 对剩余的URL进行相似度比较
     similar_pairs = []
-    for i in range(len(urls)):
-        for j in range(i + 1, len(urls)):
-            similarity = calculate_url_similarity(urls[i], urls[j])
-            if similarity >= similarity_threshold:
-                similar_pairs.append((urls[i], urls[j], similarity))
+    for i in range(len(unique_urls)):
+        for j in range(i + 1, len(unique_urls)):
+            # 只有当两个URL的域名相同时才进行相似度比较
+            domain1 = urlparse(unique_urls[i]).netloc
+            domain2 = urlparse(unique_urls[j]).netloc
+            if domain1 == domain2:
+                similarity = calculate_url_similarity(unique_urls[i], unique_urls[j])
+                if similarity >= similarity_threshold:
+                    similar_pairs.append((unique_urls[i], unique_urls[j], similarity))
     
     # 使用AI确认重复
+    duplicates = set()
     if similar_pairs:
         print(f"Found {len(similar_pairs)} potential duplicate URL pairs, checking with AI...")
         for url1, url2, similarity in tqdm(similar_pairs):
@@ -327,19 +433,14 @@ def verify_urls(urls, url_context_dict=None, threshold=5, similarity_threshold=0
                 # 保留较短的URL
                 duplicates.add(url1 if len(url1) > len(url2) else url2)
     
-    # 构建去重后的URL列表
-    for url in urls:
-        url_lower = url.lower().rstrip('/')
-        if url_lower not in seen_urls and url not in duplicates:
-            seen_urls.add(url_lower)
-            unique_urls.append(url)
-    
-    print(f"Found {len(urls)} URLs, {len(unique_urls)} unique URLs after deduplication")
+    # 构建最终的去重URL列表
+    final_urls = [url for url in unique_urls if url not in duplicates]
+    print(f"Final unique URLs after AI verification: {len(final_urls)}")
     
     verified_urls = []
     
     print("Verifying URLs...")
-    for url in tqdm(unique_urls):
+    for url in tqdm(final_urls):
         # 获取URL的上下文
         context = url_context_dict.get(url, [""])[0] if url_context_dict else ""
         
