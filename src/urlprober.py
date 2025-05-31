@@ -1,7 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
-from chat_manager import chat_inst
+from .chat_manager import chat_inst
 from tqdm import tqdm
 import time
 import re

@@ -1,9 +1,9 @@
 import os
 import sys
-from pdfurl2md import process_pdf_url_to_md
-from pdfurl2md import process_pdf_file_to_md  # 新增导入
-from urldigger import dig_urls_from_text, dig_context_of_urls, gather_texts
-from urlprober import verify_urls
+from .pdfurl2md import process_pdf_url_to_md
+from .pdfurl2md import process_pdf_file_to_md
+from .urldigger import dig_urls_from_text, dig_context_of_urls, gather_texts
+from .urlprober import verify_urls
 import json
 
 def saveJson(filePath: str, datas: list) -> None:

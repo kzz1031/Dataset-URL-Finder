@@ -1,6 +1,6 @@
 import re
 import os
-from chat_manager import chat_inst
+from .chat_manager import chat_inst
 from tqdm import tqdm
 
 def extract_urls(text):
@@ -105,7 +105,7 @@ def dig_urls_from_text(texts):
 
 
 def dig_context_of_urls(text, urls):
-    from config import CONTEXT_LENGTH  # Context Window Length: 2 * CONTEXT_LENGTH
+    from .config import CONTEXT_LENGTH  # Context Window Length: 2 * CONTEXT_LENGTH
     
     url_context_dict = {}
     
