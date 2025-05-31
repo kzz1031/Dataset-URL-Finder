@@ -8,6 +8,7 @@ import re
 import sys
 import os
 import traceback
+import json
 
 def check_url_with_llm(url, context):
     """使用LLM检查URL是否为数据集，返回0-5的分数和详细信息"""
@@ -16,43 +17,67 @@ def check_url_with_llm(url, context):
     URL: {url}
     Context: {context}
     
-    Please determine if this URL points to a dataset/benchmark that can be downloaded or accessed.
-    Consider the following criteria:
-    1. Is it a direct link to a dataset download page or official repository?
-    2. Is it NOT a project homepage, blog, or general documentation?
-    3. Is it specifically related to data/benchmarks mentioned in the paper?
-    4. If the URL is no longer accessible (404, 403, etc.), does the context suggest it was a dataset?
-    5. If the URL requires special access (like government websites), does the context indicate it's a dataset?
+    Please determine if this URL provides access to actual dataset files or data repositories that can be downloaded or accessed.
     
-    Rate this URL from 0 to 5, where:
-    0: Definitely not a dataset
-    1: Very unlikely to be a dataset
-    2: Possibly a dataset
-    3: Likely a dataset
-    4: Very likely a dataset
-    5: Definitely a dataset
+    Consider these criteria and platform-specific guidelines:
     
-    Also provide a brief explanation for your rating.
+    1. DATASET REPOSITORIES (Score 4.5-5.0):
+    - HuggingFace datasets: https://huggingface.co/datasets/...
+    - Kaggle datasets: https://kaggle.com/datasets/...
+    - UCI ML Repository: https://archive.ics.uci.edu/ml/datasets/...
+    - Zenodo data repositories: https://zenodo.org/record/... (with data files)
+    - Direct download links: ending with .zip, .tar.gz, .csv, .json, .parquet for datasets
+    - Government/academic data portals with actual dataset downloads
+    
+    2. CODE REPOSITORIES WITH DATASETS (Score 3.0-4.0):
+    - GitHub repositories that specifically host datasets in their repo (data/ folder, dataset files)
+    - GitHub releases with dataset downloads
+    - GitLab/Bitbucket repositories primarily for data sharing
+    - Note: Check if the GitHub repo is actually for dataset sharing vs just code
+    
+    3. RESEARCH/DOCUMENTATION PLATFORMS (Score 1.0-2.5):
+    - ArXiv papers: https://arxiv.org/...
+    - Research project homepages without direct data access
+    - Papers With Code project listings (unless direct dataset link)
+    - General documentation or tutorial websites
+    - Social media or blog posts
+    
+    4. PUBLISHER/JOURNAL WEBSITES (Score 0.5-1.5):
+    - Journal article pages (Nature, IEEE, ACM, etc.)
+    - Publisher websites without dataset access
+    - Paywalled content without data downloads
+    
+    5. UNCERTAIN/INACCESSIBLE (Score 2.0-3.0):
+    - URLs returning 404/403 but context suggests they were dataset links
+    - Ambiguous URLs where purpose cannot be clearly determined
+    - Private/restricted access sites where dataset nature is unclear
+    
+    IMPORTANT: 
+    - GitHub repositories CAN score higher (3-4) if they clearly host datasets, not just code
+    - Consider the context: if paper mentions "we used dataset X from GitHub repo Y", it might be legitimate
+    - Zenodo and institutional repositories should generally score high if they contain data
+    - Focus on whether DATA is accessible, not just whether it's a "proper" dataset platform
+    
+    Rate this URL from 0 to 5 (decimal scores encouraged), and provide a brief explanation.
     
     Respond in the following format:
-    Score: [0-5]
+    Score: [decimal number between 0-5]
     Explanation: [your explanation]
     """
     
     try:
         response = chat_inst.invoke(prompt)
         response_text = response.content.strip()
-        
-        # 解析响应
-        score_match = re.search(r'Score:\s*(\d+)', response_text)
+          # 解析响应
+        score_match = re.search(r'Score:\s*(\d+\.?\d*)', response_text)
         explanation_match = re.search(r'Explanation:\s*(.*?)(?:\n|$)', response_text, re.DOTALL)
         
         if score_match and explanation_match:
-            score = int(score_match.group(1))
+            score = float(score_match.group(1))
             explanation = explanation_match.group(1).strip()
         else:
             # 如果无法解析格式，尝试直接获取数字
-            score = int(response_text.split()[0])
+            score = float(response_text.split()[0])
             explanation = "No detailed explanation provided"
         
         return min(max(score, 0), 5), {
@@ -72,19 +97,63 @@ def check_url_with_llm(url, context):
         }
 
 def clean_url(url):
-    """清理URL，移除末尾的特殊字符和其他问题"""
-    # 移除引号、逗号、点和其他特殊字符
+    """清理URL，移除末尾的特殊字符、添加HTTP协议头、使用正则提取正确的URL"""
+    if not url or not isinstance(url, str):
+        return ""
+    
+    # 1. 首先使用正则表达式提取URL部分
+    # 匹配各种URL格式，包括被HTML标签等包围的URL
+    url_patterns = [
+        r'(https?://[^\s<>"\']+)',  # 标准HTTP/HTTPS URL
+        r'(www\.[^\s<>"\']+)',      # www开头的URL
+        r'([a-zA-Z0-9][-a-zA-Z0-9]{0,62}\.(?:[a-zA-Z]{2,6}|[a-zA-Z0-9-]{2,30}\.[a-zA-Z]{2,3})(?:/[^\s<>"\']*)?)'  # 域名格式
+    ]
+    
+    extracted_url = url
+    for pattern in url_patterns:
+        matches = re.findall(pattern, url)
+        if matches:
+            # 选择最长的匹配作为URL
+            extracted_url = max(matches, key=len)
+            break
+    
+    url = extracted_url
+    
+    # 2. 基本清理
     url = url.strip()
-    url = url.strip('"').strip(',').strip('.')
+    url = url.strip('"').strip("'").strip(',').strip('.')
     # 移除URL末尾的引号和逗号
-    url = re.sub(r'[",]+$', '', url)
+    url = re.sub(r'[",\']+$', '', url)
     # 移除URL中的转义字符
     url = url.replace('\\', '')
     # 移除URL末尾的特殊字符
-    url = url.rstrip('/').rstrip('\\').rstrip('.').rstrip(':').rstrip('?')
-    # 如果URL以点结尾，移除点
+    url = url.rstrip('/').rstrip('\\').rstrip('.').rstrip(':').rstrip('?').rstrip('>')
+    
+    # 移除HTML标签残留
+    url = re.sub(r'</[^>]+>.*$', '', url)  # 移除结束标签及其后的内容
+    url = re.sub(r'<[^>]+>', '', url)      # 移除开始标签
+    
+    # 3. 添加HTTP协议头（如果缺失）
+    if url and not url.startswith(('http://', 'https://')):
+        if url.startswith('www.') or '.' in url:
+            url = 'https://' + url
+    
+    # 4. 最终清理
     if url.endswith('.'):
         url = url[:-1]
+    
+    # 5. 验证URL格式
+    try:
+        parsed = urlparse(url)
+        if not parsed.netloc:
+            return ""
+        # 重新构建URL以确保格式正确
+        url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+        if parsed.query:
+            url += f"?{parsed.query}"
+    except:
+        return ""
+    
     return url
 
 def check_url_accessibility(url):
@@ -349,12 +418,36 @@ def verify_urls(urls, url_context_dict=None, threshold=4, similarity_threshold=0
     Returns:
         list: 包含验证通过的URL信息的列表，每个元素是一个字典
     """
+    # 先清洗所有输入的URL
+    print("Cleaning input URLs...")
+    cleaned_urls = []
+    original_to_cleaned = {}  # 原始URL到清洗后URL的映射
+    
+    for url in urls:
+        cleaned_url = clean_url(url)
+        if cleaned_url:  # 只保留清洗后不为空的URL
+            cleaned_urls.append(cleaned_url)
+            original_to_cleaned[url] = cleaned_url
+        else:
+            print(f"Filtered out invalid URL: {url}")
+    
+    print(f"Cleaned {len(urls)} URLs, {len(cleaned_urls)} URLs remain after cleaning")
+    
+    # 更新上下文映射，使用清洗后的URL作为键
+    if url_context_dict:
+        cleaned_context_dict = {}
+        for original_url, context in url_context_dict.items():
+            cleaned_url = original_to_cleaned.get(original_url)
+            if cleaned_url:
+                cleaned_context_dict[cleaned_url] = context
+        url_context_dict = cleaned_context_dict
+    
     # URL黑名单关键词
     blacklist_keywords = [
         'doi.org',  # DOI链接
         'proceedings',  # 会议论文集
         'z-lib',  # Z-Library
-        # 'arxiv.org',  # arXiv论文
+        'arxiv.org',  # arXiv论文
         # 'springer.com',  # Springer出版社
         # 'ieee.org',  # IEEE
         # 'acm.org',  # ACM
@@ -377,7 +470,7 @@ def verify_urls(urls, url_context_dict=None, threshold=4, similarity_threshold=0
     # 过滤掉黑名单中的URL
     filtered_urls = []
     blacklisted_urls = []
-    for url in urls:
+    for url in cleaned_urls:
         url_lower = url.lower()
         if any(keyword in url_lower for keyword in blacklist_keywords):
             blacklisted_urls.append(url)
@@ -578,5 +671,90 @@ def test_urlprober():
     
     print("\n=== Tests Completed ===")
 
+def saveJson(filePath: str, datas: list) -> None:
+    """保存数据到JSON文件"""
+    assert isinstance(datas, list), "datas should be a list"
+    directory = os.path.dirname(filePath)
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory)
+    try:
+        with open(filePath, 'w', encoding='utf-8') as f:
+            json.dump(datas, f, indent=4, ensure_ascii=False)
+    except IOError as e:
+        print(f"Error writing to file {filePath}: {e}")
+
+def main():
+    """主程序：从JSON文件读取URL数据进行验证"""
+    if len(sys.argv) != 2:
+        print("Usage: python urlprober.py <input_json_file>")
+        print("Example: python urlprober.py ../output/extracted_urls.json")
+        return
+    
+    input_file = sys.argv[1]
+    
+    # 检查输入文件是否存在
+    if not os.path.exists(input_file):
+        print(f"Error: Input file '{input_file}' does not exist.")
+        return
+    
+    try:
+        # 读取JSON文件
+        print(f"Loading URLs from {input_file}...")
+        with open(input_file, 'r', encoding='utf-8') as f:
+            url_data = json.load(f)
+        
+        # 提取URL列表（只使用"url"字段）
+        urls = []
+        url_contexts = {}
+        
+        for item in url_data:
+            if isinstance(item, dict) and 'url' in item:
+                url = item['url']
+                urls.append(url)
+                # 如果有context字段，也提取出来
+                if 'context' in item:
+                    url_contexts[url] = [item['context']]
+                else:
+                    url_contexts[url] = [""]
+        
+        print(f"Extracted {len(urls)} URLs from JSON file")
+        
+        if not urls:
+            print("No URLs found in the input file.")
+            return
+        
+        # 验证URLs
+        print("Starting URL verification...")
+        verified_urls = verify_urls(urls, url_contexts, threshold=4)
+        
+        # 生成输出文件路径
+        input_dir = os.path.dirname(input_file)
+        output_file = os.path.join(input_dir, "verified_dataset_urls.json")
+        
+        # 保存结果
+        print(f"Saving {len(verified_urls)} verified URLs to {output_file}...")
+        saveJson(output_file, verified_urls)
+        
+        # 打印摘要
+        print("\n=== Verification Summary ===")
+        print(f"Input URLs: {len(urls)}")
+        print(f"Verified URLs: {len(verified_urls)}")
+        print(f"Success rate: {len(verified_urls)/len(urls)*100:.1f}%")
+        
+        if verified_urls:
+            print("\nTop 5 verified URLs:")
+            for i, result in enumerate(verified_urls[:5]):
+                print(f"{i+1}. {result['url']} (Score: {result['score']:.1f}/10)")
+        
+        print(f"\nResults saved to: {output_file}")
+        
+    except json.JSONDecodeError as e:
+        print(f"Error parsing JSON file: {e}")
+    except Exception as e:
+        print(f"Error: {e}")
+        traceback.print_exc()
+
 if __name__ == "__main__":
-    test_urlprober()
+    main()
+    # test_urlprober()
+    

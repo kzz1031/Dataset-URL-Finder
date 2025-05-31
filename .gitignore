@@ -5,3 +5,5 @@ venv
 apikey.txt
 papers
 __init__.py
+*.patch
+*.json
