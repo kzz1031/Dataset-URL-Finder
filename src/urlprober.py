@@ -592,11 +592,15 @@ def verify_urls(urls, url_context_dict=None, threshold=5, similarity_threshold=0
         
         used_threshold = threshold
         
+        if 'error' == access_details['status'] or 'restricted' == access_details['status'] or 'not_found' == access_details['status']:
+            print(f"{url} is not accessible, skipping this url")
+            continue
+        
         if 'success' not in access_details['status']:
             used_threshold = threshold / 2  # 如果访问失败，降低阈值
             print(f"Access check failed for {url}, reducing threshold to {used_threshold}")
         else:
-            print(f"Access check succeeded for {url}, using threshold {used_threshold}")            
+            print(f"Access check succeeded for {url}, using threshold {used_threshold}")           
 
         print(f"URL: {url}, Total Score: {total_score}/10, LLM Score: {llm_score}/5, Access Score: {access_score}/5")
         # 如果总分超过阈值，添加到已验证URL列表
