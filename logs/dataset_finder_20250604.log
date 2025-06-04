@@ -1,0 +1,31 @@
+2025-06-04 22:00:31,463 - __main__ - INFO - Starting Dataset URL Finder
+2025-06-04 22:00:31,463 - __main__ - INFO - Input directory: 课程作业论文
+2025-06-04 22:00:31,463 - __main__ - INFO - Output directory: src/output
+2025-06-04 22:00:31,463 - __main__ - INFO - Found 49 PDF files to process
+2025-06-04 22:00:31,463 - __main__ - INFO - Individual result already exists for 5126_Defining_Neural_Network_A.pdf, loading existing data
+2025-06-04 22:00:31,464 - __main__ - INFO - Loaded 0 datasets from existing result for 5126_Defining_Neural_Network_A.pdf
+2025-06-04 22:00:31,464 - __main__ - INFO - Individual result already exists for 2147_Latent_Trajectory_Learnin.pdf, loading existing data
+2025-06-04 22:00:31,464 - __main__ - INFO - Loaded 2 datasets from existing result for 2147_Latent_Trajectory_Learnin.pdf
+2025-06-04 22:00:31,464 - __main__ - INFO - Skipping PDF processing for 400_Statistically_Optimal_K_me.pdf (already processed)
+2025-06-04 22:00:31,464 - __main__ - INFO - Processing: 400_Statistically_Optimal_K_me.pdf
+2025-06-04 22:00:31,464 - src.urldigger - INFO - Gathering texts from src/output/400_Statistically_Optimal_K_me/auto/400_Statistically_Optimal_K_me
+2025-06-04 22:00:31,483 - src.urldigger - INFO - Read 4 files, total text length: 7637362 characters
+2025-06-04 22:00:31,483 - __main__ - INFO - Loading URLs from existing file
+2025-06-04 22:00:31,484 - src.urldigger - INFO - Extracting context for 3 URLs (context length: 512)
+2025-06-04 22:00:31,491 - src.urldigger - INFO - Context extraction complete: 3 URLs have context
+2025-06-04 22:00:31,491 - __main__ - INFO - Verifying 3 URLs
+2025-06-04 22:00:31,492 - src.urlprober - INFO - Starting URL verification for 3 URLs with threshold 5
+2025-06-04 22:00:39,747 - src.urlprober - INFO - URL: http://gso.gbv.de/DB | Total: 0.5/10 | LLM: 0.5/5 | Access: 0.0/5
+2025-06-04 22:00:50,540 - src.urlprober - WARNING - Failed to access URL https://doi: HTTPSConnectionPool(host='doi', port=443): Max retries exceeded with url: / (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1010)')))
+2025-06-04 22:00:50,540 - src.urlprober - INFO - Verification complete: 0 URLs verified
+2025-06-04 22:00:50,540 - __main__ - INFO - Individual results saved to: src/output/individual_results/400_Statistically_Optimal_K_me_datasets.json
+2025-06-04 22:00:50,540 - __main__ - INFO - Completed 400_Statistically_Optimal_K_me.pdf: found 0 valid URLs
+2025-06-04 22:00:50,540 - __main__ - INFO - Skipping PDF processing for 20686_Compositional_Generaliza.pdf (already processed)
+2025-06-04 22:00:50,540 - __main__ - INFO - Processing: 20686_Compositional_Generaliza.pdf
+2025-06-04 22:00:50,540 - src.urldigger - INFO - Gathering texts from src/output/20686_Compositional_Generaliza/auto/20686_Compositional_Generaliza
+2025-06-04 22:00:50,550 - src.urldigger - INFO - Read 4 files, total text length: 3819274 characters
+2025-06-04 22:00:50,550 - __main__ - INFO - Extracting URLs from text content: src/output/20686_Compositional_Generaliza/auto
+2025-06-04 22:00:50,550 - src.urldigger - INFO - Extracting URLs from text content
+2025-06-04 22:00:50,617 - src.urldigger - INFO - Found 149 high-confidence URLs
+2025-06-04 22:00:50,617 - src.urldigger - INFO - Found 57 possible URLs
+2025-06-04 22:00:50,617 - src.urldigger - INFO - Validating 57 possible URLs with AI

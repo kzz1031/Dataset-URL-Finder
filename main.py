@@ -4,8 +4,11 @@ from src.pdfurl2md import process_pdf_file_to_md
 from src.urldigger import gather_texts, dig_urls_from_text, dig_context_of_urls
 from src.urlprober import verify_urls, clean_and_deduplicate_urls
 from src.main import saveJson
+from src.logger_config import setup_logger
 from pprint import pprint
 import json
+
+logger = setup_logger(__name__)
 
 def determine_source_type(url: str) -> str:
     """根据URL确定数据源类型"""
@@ -89,7 +92,7 @@ def save_urls_to_text(pdf_name: str, urls: list, output_dir: str):
     with open(text_file_path, 'w', encoding='utf-8') as f:
         for i, url in enumerate(urls, 1):
             f.write(f"{url}\n")
-    print(f"URLs saved to: {text_file_path}")
+    logger.info(f"Saved {len(urls)} URLs to: {text_file_path}")
 
 def check_urls_file_exists(pdf_name: str, output_dir: str) -> bool:
     """检查该论文的URLs文本文件是否已存在"""
@@ -113,7 +116,7 @@ def load_individual_result(pdf_name: str, output_dir: str) -> dict:
             result = json.load(f)
             return result.get('datasets', {})
     except Exception as e:
-        print(f"Error loading individual result for {pdf_name}: {e}")
+        logger.error(f"Error loading individual result for {pdf_name}: {e}")
         return {}
 
 def process_pdf_directory(pdf_dir: str, output_dir: str):
@@ -121,6 +124,7 @@ def process_pdf_directory(pdf_dir: str, output_dir: str):
         os.makedirs(output_dir)
     
     pdf_files = [f for f in os.listdir(pdf_dir) if f.endswith('.pdf')]
+    logger.info(f"Found {len(pdf_files)} PDF files to process")
     
     all_results = {}
     
@@ -135,33 +139,31 @@ def process_pdf_directory(pdf_dir: str, output_dir: str):
         pdf_path = os.path.join(pdf_dir, pdf_file)
         pdf_name = os.path.splitext(pdf_file)[0]
         
-        # 首先检查个人结果文件是否已存在
         if check_individual_result_exists(pdf_name, output_dir):
-            print(f"Individual result already exists for {pdf_file}, loading existing data...")
+            logger.info(f"Individual result already exists for {pdf_file}, loading existing data")
             paper_results = load_individual_result(pdf_name, output_dir)
             all_results[pdf_name] = paper_results
-            print(f"Loaded {len(paper_results)} datasets from existing result for {pdf_file}")
+            logger.info(f"Loaded {len(paper_results)} datasets from existing result for {pdf_file}")
             continue
         
-        # 检查URLs文本文件是否已存在
         if check_urls_file_exists(pdf_name, output_dir):
-            print(f"URLs file already exists for {pdf_file}, skipping URL extraction...")
+            logger.info(f"URLs file already exists for {pdf_file}, skipping URL extraction")
             continue
         
-        # 检查是否已经在output目录中处理过
         output_pdf_dir = os.path.join(output_dir, pdf_name)
         if os.path.exists(output_pdf_dir):
-            print(f"skip the file: {pdf_file}")
+            logger.info(f"Skipping PDF processing for {pdf_file} (already processed)")
             skip = 1
             outdir = output_pdf_dir + '/auto'
             mdname = pdf_name
             
-        print(f"processing: {pdf_file}")
+        logger.info(f"Processing: {pdf_file}")
         try:
             if not skip:
+                logger.info(f"Converting PDF to markdown: {pdf_file}")
                 outdir, mdname = process_pdf_file_to_md(pdf_path, 'en')
             if skip:
-                print("skipping...")
+                logger.debug("Skipping PDF conversion (already done)")
                 skip = 0
 
             deduplicated_urls = []
@@ -169,20 +171,19 @@ def process_pdf_directory(pdf_dir: str, output_dir: str):
             texts = gather_texts(outdir, mdname)
             
             if not check_urls_file_exists(pdf_name, '.'):
-                print("gathering text from ", outdir)
+                logger.info(f"Extracting URLs from text content: {outdir}")
                 urls = dig_urls_from_text(texts)
                 url_context_dict = dig_context_of_urls(texts, urls)
                 deduplicated_urls, url_context_dict = clean_and_deduplicate_urls(urls, url_context_dict)
                 save_urls_to_text(pdf_name, deduplicated_urls, '.')
             else:
-                print("URLs file already exists, skipping URL extraction...")
+                logger.info("Loading URLs from existing file")
                 with open(os.path.join('.', 'urls_text', f"{pdf_name}_urls.txt"), 'r', encoding='utf-8') as f:
                     deduplicated_urls = [line.strip() for line in f if line.strip()]
                 if deduplicated_urls:
                     url_context_dict = dig_context_of_urls(texts, deduplicated_urls)
             
-            # pprint(url_context_dict)
-            
+            logger.info(f"Verifying {len(deduplicated_urls)} URLs")
             verified_urls = verify_urls(deduplicated_urls, url_context_dict)
             
             # 保存URLs到文本文件
@@ -220,28 +221,31 @@ def process_pdf_directory(pdf_dir: str, output_dir: str):
                 "verified_urls_details": verified_urls  # Include detailed verification info
             }
             saveJson(individual_result_file, individual_result)
-            print(f"Individual results saved to: {individual_result_file}")
+            logger.info(f"Individual results saved to: {individual_result_file}")
             
             all_results[pdf_name] = paper_results
             
-            pprint(paper_results)
-            print(f"finish: {pdf_file}, find {len(verified_urls)} valid URL")
+            logger.info(f"Completed {pdf_file}: found {len(verified_urls)} valid URLs")
             
         except Exception as e:
-            print(f"处理 {pdf_file} 时出错: {str(e)}")
+            logger.error(f"Error processing {pdf_file}: {str(e)}", exc_info=True)
             continue
     
     final_output_file = os.path.join(output_dir, "all_datasets.json")
     saveJson(final_output_file, all_results)
-    print(f"所有结果已保存到: {final_output_file}")
-    print(f"Individual results saved in: {individual_results_dir}")
+    logger.info(f"All results saved to: {final_output_file}")
+    logger.info(f"Individual results saved in: {individual_results_dir}")
 
 def main():
-    # 设置输入和输出目录
+    logger.info("Starting Dataset URL Finder")
     pdf_dir = "课程作业论文"
     output_dir = "src/output"
+    
+    logger.info(f"Input directory: {pdf_dir}")
+    logger.info(f"Output directory: {output_dir}")
 
     process_pdf_directory(pdf_dir, output_dir)
+    logger.info("Processing complete")
 
 if __name__ == "__main__":
     main()

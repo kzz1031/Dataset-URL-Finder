@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 from .chat_manager import chat_inst
+from .logger_config import setup_logger
 from tqdm import tqdm
 import time
 import re
@@ -9,6 +10,8 @@ import sys
 import os
 import traceback
 import json
+
+logger = setup_logger(__name__)
 
 def check_url_with_llm(url, context):
     """使用LLM检查URL是否为数据集，返回0-5的分数和详细信息"""
@@ -85,6 +88,7 @@ def check_url_with_llm(url, context):
             }
         }
     except Exception as e:
+        logger.error(f"Error in LLM check for URL {url}: {str(e)}")
         return 0, {
             "status": "error",
             "message": f"Error in LLM check: {str(e)}",
@@ -175,20 +179,23 @@ def check_url_accessibility(url):
         try:
             response = requests.get(url, timeout=10, headers=headers)
         except requests.exceptions.RequestException as e:
+            logger.warning(f"Failed to access URL {url}: {str(e)}")
             return 0, {
                 "status": "error",
                 "message": f"Request failed: {str(e)}",
                 "details": "URL is completely inaccessible"
             }
         
-        # 检查特殊状态码
+        # Check special status codes
         if response.status_code == 403:
+            logger.warning(f"Access restricted (403) for URL: {url}")
             return 0, {
                 "status": "restricted",
                 "message": "Access restricted (403)",
                 "details": "This URL requires special access permissions"
             }
         elif response.status_code == 404:
+            logger.warning(f"URL not found (404): {url}")
             return 0, {
                 "status": "not_found",
                 "message": "URL not found (404)",
@@ -352,6 +359,7 @@ def check_url_accessibility(url):
                     }
         
         except Exception as e:
+            logger.error(f"AI evaluation failed for URL {url}: {str(e)}")
             return 0.0, {
                 "status": "ai_error",
                 "message": f"AI evaluation failed: {str(e)}",
@@ -363,6 +371,7 @@ def check_url_accessibility(url):
             }
             
     except Exception as e:
+        logger.error(f"URL processing error for {url}: {str(e)}")
         return 0.0, {
             "status": "error",
             "message": f"URL processing error: {str(e)}",
@@ -436,12 +445,14 @@ Respond with just 'DUPLICATE' or 'DIFFERENT' and no other explanation."""
         response_text = response.content.strip().upper()
         return response_text == 'DUPLICATE'
     except Exception as e:
-        print(f"Error checking URL duplicate: {e}")
+        logger.error(f"Error checking URL duplicate between {url1} and {url2}: {e}")
         return False
         
 def clean_and_deduplicate_urls(urls, url_context_dict=None, threshold=4.5, similarity_threshold=0.8):
+    logger.info("Starting URL cleaning and deduplication process")
+    logger.info(f"Input: {len(urls)} URLs")
+    
     # 先清洗所有输入的URL
-    print("Cleaning input URLs...")
     cleaned_urls = []
     original_to_cleaned = {}  # 原始URL到清洗后URL的映射
     
@@ -451,9 +462,9 @@ def clean_and_deduplicate_urls(urls, url_context_dict=None, threshold=4.5, simil
             cleaned_urls.append(cleaned_url)
             original_to_cleaned[url] = cleaned_url
         else:
-            print(f"Filtered out invalid URL: {url}")
+            logger.warning(f"Filtered out invalid URL: {url}")
     
-    print(f"Cleaned {len(urls)} URLs, {len(cleaned_urls)} URLs remain after cleaning")
+    logger.info(f"Cleaned {len(urls)} URLs, {len(cleaned_urls)} URLs remain after cleaning")
     
     # 更新上下文映射，使用清洗后的URL作为键
     if url_context_dict:
@@ -506,7 +517,7 @@ def clean_and_deduplicate_urls(urls, url_context_dict=None, threshold=4.5, simil
     
     # print(len(filtered_urls))
     # 在验证前进行URL去重
-    print("Checking for duplicate URLs...")
+    logger.info("Checking for duplicate URLs...")
     
     # 首先规范化所有URL
     normalized_urls = [(url, normalize_url(url)) for url in filtered_urls]
@@ -525,11 +536,9 @@ def clean_and_deduplicate_urls(urls, url_context_dict=None, threshold=4.5, simil
     # 获取去重后的URL列表
     unique_urls = list(norm_to_orig.values())
     
-    print('URLs for deduplication:', urls)
-    print('Unique URLs after deduplication:', unique_urls)
+    logger.info(f"After basic deduplication: {len(unique_urls)} unique URLs")
+    logger.debug(f"Unique URLs: {unique_urls}")
     
-    print(f"Found {len(filtered_urls)} URLs, {len(unique_urls)} unique URLs after basic deduplication")
-    # print(unique_urls)
     # 对剩余的URL进行相似度比较
     similar_pairs = []
     for i in range(len(unique_urls)):
@@ -545,7 +554,7 @@ def clean_and_deduplicate_urls(urls, url_context_dict=None, threshold=4.5, simil
     # 使用AI确认重复
     duplicates = set()
     if similar_pairs:
-        print(f"Found {len(similar_pairs)} potential duplicate URL pairs, checking with AI...")
+        logger.info(f"Found {len(similar_pairs)} potential duplicate URL pairs, checking with AI...")
         for url1, url2, similarity in tqdm(similar_pairs):
             if check_url_duplicate(url1, url2):
                 # 保留较短的URL
@@ -553,27 +562,18 @@ def clean_and_deduplicate_urls(urls, url_context_dict=None, threshold=4.5, simil
     
     # 构建最终的去重URL列表
     deduplicated_urls = [url for url in unique_urls if url not in duplicates]
-    print(f"Final unique URLs after AI verification: {len(deduplicated_urls)}")
+    logger.info(f"Final result: {len(deduplicated_urls)} unique URLs after AI verification")
     
     return deduplicated_urls, url_context_dict
 
-
 def verify_urls(urls, url_context_dict=None, threshold=5, similarity_threshold=0.8):
-    """
-    验证URL列表，返回得分超过阈值的URL
-    Args:
-        urls: URL列表
-        url_context_dict: URL到上下文的映射字典
-        threshold: 分数阈值（0-10）
-        similarity_threshold: URL相似度阈值（0-1）
-    Returns:
-        list: 包含验证通过的URL信息的列表，每个元素是一个字典
-    """
+    """验证URL列表，返回得分超过阈值的URL"""
     
     verified_urls = []
     
-    print("Verifying URLs...")
-    for url in tqdm(urls):
+    logger.info(f"Starting URL verification for {len(urls)} URLs with threshold {threshold}")
+    
+    for url in tqdm(urls, desc="Verifying URLs"):
         # 获取URL的上下文
         context = url_context_dict.get(url, [""])[0] if url_context_dict else ""
         
@@ -589,17 +589,17 @@ def verify_urls(urls, url_context_dict=None, threshold=5, similarity_threshold=0
         used_threshold = threshold
         
         if 'error' == access_details['status'] or 'restricted' == access_details['status'] or 'not_found' == access_details['status']:
-            print(f"{url} is not accessible, skipping this url")
+            logger.debug(f"Skipping inaccessible URL: {url}")
             continue
         
         if 'success' not in access_details['status']:
-            used_threshold = threshold / 2  # 如果访问失败，降低阈值
-            print(f"Access check failed for {url}, reducing threshold to {used_threshold}")
+            used_threshold = threshold / 2
+            logger.debug(f"Access check failed for {url}, reducing threshold to {used_threshold}")
         else:
-            print(f"Access check succeeded for {url}, using threshold {used_threshold}")           
-
-        print(f"URL: {url}, Total Score: {total_score}/10, LLM Score: {llm_score}/5, Access Score: {access_score}/5")
-        # 如果总分超过阈值，添加到已验证URL列表
+            logger.debug(f"Access check succeeded for {url}")
+        
+        logger.info(f"URL: {url} | Total: {total_score}/10 | LLM: {llm_score}/5 | Access: {access_score}/5")
+        
         if total_score >= used_threshold or llm_score >= 4.2 or access_score >= 4.2:
             verified_urls.append({
                 'url': url,
@@ -610,118 +610,16 @@ def verify_urls(urls, url_context_dict=None, threshold=5, similarity_threshold=0
                 'access_details': access_details,
                 'context': context
             })
+            logger.info(f"URL verified: {url} (Score: {total_score})")
+        else:
+            logger.debug(f"URL rejected: {url} (Score: {total_score})")
         
-        # 添加延迟以避免请求过快
         time.sleep(1)
     
-    # 按score降序排序verified_urls
     verified_urls.sort(key=lambda x: x['score'], reverse=True)
+    logger.info(f"Verification complete: {len(verified_urls)} URLs verified")
     
     return verified_urls
-
-def test_urlprober():
-    """运行URL验证系统的测试"""
-    print("=== Starting URL Prober Tests ===")
-    print(f"Python version: {sys.version}")
-    print(f"Current working directory: {os.getcwd()}")
-    
-    try:
-        # 测试单个URL
-        print("\n=== Starting Single URL Test ===")
-        test_url = "https://huggingface.co/datasets/mnist"
-        test_context = "The MNIST dataset is a large database of handwritten digits that is commonly used for training various image processing systems."
-        
-        print(f"\n1. Input Information:")
-        print(f"URL: {test_url}")
-        print(f"Context: {test_context}")
-        
-        # 测试LLM检查
-        print("\n2. Starting LLM check...")
-        try:
-            llm_score, llm_details = check_url_with_llm(test_url, test_context)
-            print(f"LLM Score: {llm_score}/5")
-            print(f"LLM Details: {llm_details}")
-        except Exception as e:
-            print(f"Error in LLM check: {str(e)}")
-            print("Stack trace:")
-            traceback.print_exc()
-        
-        # 测试URL可访问性检查
-        print("\n3. Starting URL accessibility check...")
-        try:
-            access_score, details = check_url_accessibility(test_url)
-            print(f"Accessibility Score: {access_score}/5")
-            print(f"Details: {details}")
-        except Exception as e:
-            print(f"Error in accessibility check: {str(e)}")
-            print("Stack trace:")
-            traceback.print_exc()
-        
-        # 测试完整验证
-        print("\n4. Starting complete verification...")
-        try:
-            results = verify_urls([test_url], {test_url: [test_context]})
-            print("\nFinal Results:")
-            if results:
-                for result in results:
-                    print(f"\nURL: {result['url']}")
-                    print(f"Total Score: {result['score']}/10")
-                    print(f"LLM Score: {result['llm_score']}/5")
-                    print(f"Access Score: {result['access_score']}/5")
-                    print(f"Access Details: {result['access_details']}")
-                    print(f"LLM Details: {result['llm_details']}")
-            else:
-                print("No results returned from verify_urls")
-        except Exception as e:
-            print(f"Error in complete verification: {str(e)}")
-            print("Stack trace:")
-            traceback.print_exc()
-        
-        # 测试多个URL
-        print("\n=== Starting Multiple URLs Test ===")
-        test_urls = [
-            "https://huggingface.co/datasets/mnist",  # 数据集
-            "https://www.cs.toronto.edu/~kriz/cifar.html",     # 数据集
-            "https://github.com/kzz1031/Dataset-URL-Finder"   # 项目主页
-        ]
-        
-        test_contexts = {
-            test_urls[0]: ["The MNIST dataset is a large database of handwritten digits."],
-            test_urls[1]: ["PyTorch is a machine learning framework."],
-            test_urls[2]: ["MNIST dataset on Kaggle platform."]
-        }
-        
-        print("\n1. Input Information:")
-        print("URLs to test:")
-        for url in test_urls:
-            print(f"- {url}")
-        
-        print("\n2. Starting verification of multiple URLs...")
-        try:
-            results = verify_urls(test_urls, test_contexts, 0)
-            
-            print("\nResults for all URLs:")
-            if results:
-                for result in results:
-                    print(f"\nURL: {result['url']}")
-                    print(f"Total Score: {result['score']}/10")
-                    print(f"LLM Score: {result['llm_score']}/5")
-                    print(f"Access Score: {result['access_score']}/5")
-                    print(f"Access Details: {result['access_details']}")
-                    print(f"LLM Details: {result['llm_details']}")
-            else:
-                print("No results returned from verify_urls")
-        except Exception as e:
-            print(f"Error in multiple URLs verification: {str(e)}")
-            print("Stack trace:")
-            traceback.print_exc()
-            
-    except Exception as e:
-        print(f"Unexpected error in tests: {str(e)}")
-        print("Stack trace:")
-        traceback.print_exc()
-    
-    print("\n=== Tests Completed ===")
 
 def saveJson(filePath: str, datas: list) -> None:
     """保存数据到JSON文件"""
@@ -733,25 +631,24 @@ def saveJson(filePath: str, datas: list) -> None:
         with open(filePath, 'w', encoding='utf-8') as f:
             json.dump(datas, f, indent=4, ensure_ascii=False)
     except IOError as e:
-        print(f"Error writing to file {filePath}: {e}")
+        logger.error(f"Error writing to file {filePath}: {e}")
 
 def main():
     """主程序：从JSON文件读取URL数据进行验证"""
     if len(sys.argv) != 2:
-        print("Usage: python urlprober.py <input_json_file>")
-        print("Example: python urlprober.py ../output/extracted_urls.json")
+        logger.error("Usage: python urlprober.py <input_json_file>")
         return
     
     input_file = sys.argv[1]
     
     # 检查输入文件是否存在
     if not os.path.exists(input_file):
-        print(f"Error: Input file '{input_file}' does not exist.")
+        logger.error(f"Input file '{input_file}' does not exist")
         return
     
     try:
+        logger.info(f"Loading URLs from {input_file}")
         # 读取JSON文件
-        print(f"Loading URLs from {input_file}...")
         with open(input_file, 'r', encoding='utf-8') as f:
             url_data = json.load(f)
         
@@ -769,14 +666,13 @@ def main():
                 else:
                     url_contexts[url] = [""]
         
-        print(f"Extracted {len(urls)} URLs from JSON file")
+        logger.info(f"Extracted {len(urls)} URLs from JSON file")
         
         if not urls:
-            print("No URLs found in the input file.")
+            logger.warning("No URLs found in the input file")
             return
         
-        # 验证URLs
-        print("Starting URL verification...")
+        logger.info("Starting URL verification process")
         verified_urls = verify_urls(urls, url_contexts, threshold=4)
         
         # 生成输出文件路径
@@ -784,27 +680,25 @@ def main():
         output_file = os.path.join(input_dir, "verified_dataset_urls.json")
         
         # 保存结果
-        print(f"Saving {len(verified_urls)} verified URLs to {output_file}...")
+        logger.info(f"Saving {len(verified_urls)} verified URLs to {output_file}...")
         saveJson(output_file, verified_urls)
         
         # 打印摘要
-        print("\n=== Verification Summary ===")
-        print(f"Input URLs: {len(urls)}")
-        print(f"Verified URLs: {len(verified_urls)}")
-        print(f"Success rate: {len(verified_urls)/len(urls)*100:.1f}%")
+        logger.info("=== Verification Summary ===")
+        logger.info(f"Input URLs: {len(urls)}")
+        logger.info(f"Verified URLs: {len(verified_urls)}")
+        logger.info(f"Success rate: {len(verified_urls)/len(urls)*100:.1f}%")
         
         if verified_urls:
-            print("\nTop 5 verified URLs:")
+            logger.info("Top 5 verified URLs:")
             for i, result in enumerate(verified_urls[:5]):
-                print(f"{i+1}. {result['url']} (Score: {result['score']:.1f}/10)")
-        
-        print(f"\nResults saved to: {output_file}")
+                logger.info(f"{i+1}. {result['url']} (Score: {result['score']:.1f}/10)")
         
     except json.JSONDecodeError as e:
-        print(f"Error parsing JSON file: {e}")
+        logger.error(f"Error parsing JSON file: {e}")
     except Exception as e:
-        print(f"Error: {e}")
-        traceback.print_exc()
+        logger.error(f"Unexpected error: {e}")
+        logger.debug("Stack trace:", exc_info=True)
 
 if __name__ == "__main__":
     main()
