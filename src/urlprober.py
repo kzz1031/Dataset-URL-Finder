@@ -17,11 +17,11 @@ def check_url_with_llm(url, context):
     URL: {url}
     Context: {context}
     
-    Please determine if this URL provides access to actual dataset files or data repositories that can be downloaded or accessed.
+    Please determine from the context if this URL provides access to actual dataset files or data repositories that can be downloaded or accessed.
     
-    Consider these criteria and platform-specific guidelines:
+    Consider these criteria and platform-specific guidelines: (The higher the score, the more likely it is to provide datasets. Don't hesitate to rank very high if the context suggests it is a dataset link, and don't hesitate to rank very low if it obviously is not a dataset link.)
     
-    1. DATASET REPOSITORIES (Score 4.5-5.0):
+    1. DATASET REPOSITORIES (Score 1.0-5.0):
     - HuggingFace datasets: https://huggingface.co/datasets/...
     - Kaggle datasets: https://kaggle.com/datasets/...
     - UCI ML Repository: https://archive.ics.uci.edu/ml/datasets/...
@@ -29,31 +29,26 @@ def check_url_with_llm(url, context):
     - Direct download links: ending with .zip, .tar.gz, .csv, .json, .parquet for datasets
     - Government/academic data portals with actual dataset downloads
     
-    2. CODE REPOSITORIES WITH DATASETS (Score 3.0-4.0):
-    - GitHub repositories that specifically host datasets in their repo (data/ folder, dataset files)
-    - GitHub releases with dataset downloads
-    - GitLab/Bitbucket repositories primarily for data sharing
-    - Note: Check if the GitHub repo is actually for dataset sharing vs just code
+    2. CODE REPOSITORIES WITH DATASETS (Score 1.0-5.0):
+    - GitHub repositories that specifically host datasets in their repo (data/ folder, dataset files), and that they host datasets can be extrapolated from the context
     
-    3. RESEARCH/DOCUMENTATION PLATFORMS (Score 1.0-2.5):
+    3. RESEARCH/DOCUMENTATION PLATFORMS/PUBLISHER/JOURNAL WEBSITES (Score 0.0-1.0):
     - ArXiv papers: https://arxiv.org/...
     - Research project homepages without direct data access
     - Papers With Code project listings (unless direct dataset link)
     - General documentation or tutorial websites
     - Social media or blog posts
-    
-    4. PUBLISHER/JOURNAL WEBSITES (Score 0.5-1.5):
     - Journal article pages (Nature, IEEE, ACM, etc.)
     - Publisher websites without dataset access
     - Paywalled content without data downloads
     
-    5. UNCERTAIN/INACCESSIBLE (Score 2.0-3.0):
+    4. UNCERTAIN/INACCESSIBLE (Score 0.0-3.0):
     - URLs returning 404/403 but context suggests they were dataset links
     - Ambiguous URLs where purpose cannot be clearly determined
     - Private/restricted access sites where dataset nature is unclear
     
     IMPORTANT: 
-    - GitHub repositories CAN score higher (3-4) if they clearly host datasets, not just code
+    - GitHub repositories should score higher if they clearly host datasets, not just code
     - Consider the context: if paper mentions "we used dataset X from GitHub repo Y", it might be legitimate
     - Zenodo and institutional repositories should generally score high if they contain data
     - Focus on whether DATA is accessible, not just whether it's a "proper" dataset platform
@@ -249,9 +244,16 @@ def check_url_accessibility(url):
         Page Content (first 3000 characters):
         {page_text}
 
-        Please evaluate this webpage based on the following criteria:
+        Please evaluate this webpage based on the following criteria: (The more likely it is to provide datasets, the higher the score)
+        - Does the page provide direct access to downloadable datasets?
+        - Are there clear instructions or links to access datasets?
+        - Is the content focused on datasets or data repositories?
+        - Is the page from a reputable dataset platform or repository?
+        - Does the page have clear documentation or metadata about the datasets?
 
-        DATASET REPOSITORIES (Score 4.0-5.0):
+        Please rate this webpage on a scale from 0.0 to 5.0 based on its usefulness for obtaining datasets, using the following scoring system:
+
+        DATASET REPOSITORIES (Score 2.5-5.0):
         - Dedicated dataset platforms (HuggingFace, Kaggle, UCI ML Repository, etc.)
         - Government/academic data portals with downloadable datasets
         - Research data repositories (Zenodo, Figshare) with actual data files
@@ -259,27 +261,18 @@ def check_url_accessibility(url):
         - Dataset documentation with clear access instructions
         - Database dumps or API endpoints for data access
 
-        CODE REPOSITORIES WITH DATA (Score 3.0-4.0):
+        CODE REPOSITORIES WITH DATA (Score 2.5-5.0):
         - GitHub/GitLab repositories specifically hosting datasets
         - Research projects with data folders and dataset files
         - Open source projects primarily for data sharing
         - Repositories with dataset releases or data downloads
 
-        RESEARCH/DOCUMENTATION (Score 2.0-3.0):
-        - Dataset description pages without direct downloads
-        - Research project homepages mentioning datasets but requiring contact
-        - Academic papers describing datasets
-        - Tutorial or educational content about datasets
-        - Dataset catalogs or indices without direct access
-
-        GENERAL CONTENT (Score 1.0-2.0):
+        NON-DATASET CONTENT (Score 0.0):
         - General software repositories without data focus
         - Commercial websites with limited data offerings
         - Blog posts or news articles mentioning datasets
         - Social media or forum discussions about data
         - Educational content not specifically about datasets
-
-        NON-DATASET CONTENT (Score 0.0-1.0):
         - Completely unrelated content (entertainment, personal blogs, etc.)
         - Error pages or broken websites
         - Paywalled content without clear data access
@@ -604,7 +597,7 @@ def verify_urls(urls, url_context_dict=None, threshold=5, similarity_threshold=0
 
         print(f"URL: {url}, Total Score: {total_score}/10, LLM Score: {llm_score}/5, Access Score: {access_score}/5")
         # 如果总分超过阈值，添加到已验证URL列表
-        if total_score >= used_threshold:
+        if total_score >= used_threshold or llm_score >= 4.2 or access_score >= 4.2:
             verified_urls.append({
                 'url': url,
                 'score': total_score,
