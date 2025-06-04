@@ -148,7 +148,7 @@ def process_pdf_directory(pdf_dir: str, output_dir: str):
                 if deduplicated_urls:
                     url_context_dict = dig_context_of_urls(texts, deduplicated_urls)
             
-            pprint(url_context_dict)
+            # pprint(url_context_dict)
             
             verified_urls = verify_urls(deduplicated_urls, url_context_dict)
             
@@ -181,7 +181,6 @@ def process_pdf_directory(pdf_dir: str, output_dir: str):
             all_results[pdf_name] = paper_results
             
             pprint(paper_results)
-            
             print(f"finish: {pdf_file}, find {len(verified_urls)} valid URL")
             
         except Exception as e:

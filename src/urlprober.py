@@ -131,7 +131,7 @@ def clean_url(url):
     
     # 移除HTML标签残留
     url = re.sub(r'</[^>]+>.*$', '', url)  # 移除结束标签及其后的内容
-    url = re.sub(r'<[^>]+>', '', url)      # 移除开始标签
+    url = re.sub(r'<[^>]+>', '', url)      # 秼除开始标签
     
     # 3. 添加HTTP协议头（如果缺失）
     if url and not url.startswith(('http://', 'https://')):
@@ -157,7 +157,7 @@ def clean_url(url):
     return url
 
 def check_url_accessibility(url):
-    """检查URL的可访问性和内容，返回0-5的分数和详细信息"""
+    """访问URL并使用AI分析网页内容来判断是否为数据集链接，返回0-5的分数和详细信息"""
     try:
         # 清理URL
         url = clean_url(url)
@@ -178,25 +178,20 @@ def check_url_accessibility(url):
         }
         
         try:
-            response = requests.head(url, allow_redirects=True, timeout=10, headers=headers)
+            response = requests.get(url, timeout=10, headers=headers)
         except requests.exceptions.RequestException as e:
-            # 如果HEAD请求失败，尝试GET请求
-            try:
-                response = requests.get(url, timeout=10, headers=headers)
-            except requests.exceptions.RequestException as e:
-                print(f"Error accessing URL {url}: {str(e)}")
-                return 0, {
-                    "status": "error",
-                    "message": f"Request failed: {str(e)}",
-                    "details": "URL is completely inaccessible"
-                }
+            return 0, {
+                "status": "error",
+                "message": f"Request failed: {str(e)}",
+                "details": "URL is completely inaccessible"
+            }
         
         # 检查特殊状态码
         if response.status_code == 403:
             return 0, {
                 "status": "restricted",
                 "message": "Access restricted (403)",
-                "details": "This URL requires special access permissions (e.g., government website)"
+                "details": "This URL requires special access permissions"
             }
         elif response.status_code == 404:
             return 0, {
@@ -211,9 +206,8 @@ def check_url_accessibility(url):
                 "details": "The URL is not accessible for technical reasons"
             }
         
-        # 2. 获取页面内容
+        # 2. 解析页面内容
         try:
-            response = requests.get(url, timeout=10, headers=headers)
             soup = BeautifulSoup(response.text, 'html.parser')
         except Exception as e:
             return 0, {
@@ -231,113 +225,158 @@ def check_url_accessibility(url):
                 "requires_manual_check": True
             }
         
-        # 4. 检查页面特征
-        dataset_indicators = {
-            'huggingface': {
-                'keywords': ['huggingface.co/datasets'],
-                'weight': 4.0,
-                'context_required': False
-            },
-            'kaggle': {
-                'keywords': ['kaggle.com/datasets'],
-                'weight': 4.0,
-                'context_required': False
-            },
-            'dataset': {
-                'keywords': ['dataset', 'datasets', 'data set', 'data sets'],
-                'weight': 3.5,
-                'context_required': False
-            },
-            'download': {
-                'keywords': ['download', 'download data', 'download dataset'],
-                'weight': 3.0,
-                'context_required': False
-            },
-            'github': {
-                'keywords': ['github.com', 'dataset', 'data'],
-                'weight': 2.5,
-                'context_required': True
-            },
-            'government': {
-                'keywords': ['census.gov', 'data.gov', 'nasa.gov/data'],
-                'weight': 3.0,
-                'context_required': True
-            },
-            'academic': {
-                'keywords': ['.edu/data', '.edu/dataset', '.edu/benchmark'],
-                'weight': 2.5,
-                'context_required': True
+        # 4. 提取页面关键信息
+        page_title = soup.title.string if soup.title else "No title"
+        page_text = soup.get_text()
+        
+        # 限制文本长度以避免prompt过长
+        if len(page_text) > 3000:
+            page_text = page_text[:3000] + "..."
+        
+        # 提取页面结构信息
+        download_links = len(soup.find_all('a', href=lambda x: x and any(ext in x.lower() for ext in ['.csv', '.json', '.zip', '.tar', '.gz', '.parquet', '.xlsx', '.tsv'])))
+        data_keywords = len([word for word in ['dataset', 'data', 'download', 'repository', 'collection'] if word in page_text.lower()])
+        
+        # 5. 构建AI评估prompt
+        prompt = f"""
+        You are an expert in identifying dataset websites. Please analyze the following webpage content and determine if this website provides access to datasets or data repositories.
+
+        URL: {url}
+        Page Title: {page_title}
+        Number of potential data file download links: {download_links}
+        Data-related keywords found: {data_keywords}
+
+        Page Content (first 3000 characters):
+        {page_text}
+
+        Please evaluate this webpage based on the following criteria:
+
+        DATASET REPOSITORIES (Score 4.0-5.0):
+        - Dedicated dataset platforms (HuggingFace, Kaggle, UCI ML Repository, etc.)
+        - Government/academic data portals with downloadable datasets
+        - Research data repositories (Zenodo, Figshare) with actual data files
+        - Pages with direct download links for data files (.csv, .json, .zip, etc.)
+        - Dataset documentation with clear access instructions
+        - Database dumps or API endpoints for data access
+
+        CODE REPOSITORIES WITH DATA (Score 3.0-4.0):
+        - GitHub/GitLab repositories specifically hosting datasets
+        - Research projects with data folders and dataset files
+        - Open source projects primarily for data sharing
+        - Repositories with dataset releases or data downloads
+
+        RESEARCH/DOCUMENTATION (Score 2.0-3.0):
+        - Dataset description pages without direct downloads
+        - Research project homepages mentioning datasets but requiring contact
+        - Academic papers describing datasets
+        - Tutorial or educational content about datasets
+        - Dataset catalogs or indices without direct access
+
+        GENERAL CONTENT (Score 1.0-2.0):
+        - General software repositories without data focus
+        - Commercial websites with limited data offerings
+        - Blog posts or news articles mentioning datasets
+        - Social media or forum discussions about data
+        - Educational content not specifically about datasets
+
+        NON-DATASET CONTENT (Score 0.0-1.0):
+        - Completely unrelated content (entertainment, personal blogs, etc.)
+        - Error pages or broken websites
+        - Paywalled content without clear data access
+        - General business websites
+        - Spam or malicious content
+
+        EVALUATION GUIDELINES:
+        1. Focus on whether actual data/datasets can be obtained from this page
+        2. Higher scores for direct download capabilities
+        3. Consider the quality and relevance of the dataset content
+        4. Academic and research contexts should be weighted positively
+        5. Clear documentation and accessibility increase the score
+        6. Multiple data formats or large datasets indicate higher value
+
+        Rate this webpage from 0.0 to 5.0 and provide a brief explanation focusing on what makes this page useful (or not useful) for obtaining datasets.
+
+        Respond in exactly this format:
+        Score: [number between 0.0-5.0]
+        Explanation: [your reasoning in 1-2 concise sentences]
+        """
+
+        try:
+            # 调用AI进行评估
+            response_text = chat_inst.invoke(prompt)
+            
+            # 解析AI响应
+            score_match = re.search(r'Score:\s*(\d+\.?\d*)', response_text)
+            explanation_match = re.search(r'Explanation:\s*(.*?)(?:\n|$)', response_text, re.DOTALL)
+            
+            if score_match and explanation_match:
+                score = float(score_match.group(1))
+                explanation = explanation_match.group(1).strip()
+                
+                # 确保分数在0-5范围内
+                score = min(max(score, 0.0), 5.0)
+                
+                return score, {
+                    "status": "success",
+                    "message": "AI content analysis completed",
+                    "details": {
+                        "ai_score": score,
+                        "explanation": explanation,
+                        "page_title": page_title,
+                        "download_links_found": download_links,
+                        "data_keywords_count": data_keywords,
+                        "evaluation_method": "AI-based webpage content analysis",
+                        "raw_response": response_text
+                    }
+                }
+            else:
+                # 如果无法解析标准格式，尝试提取数字
+                numbers = re.findall(r'\d+\.?\d*', response_text)
+                if numbers:
+                    score = float(numbers[0])
+                    score = min(max(score, 0.0), 5.0)
+                    return score, {
+                        "status": "partial_success",
+                        "message": "AI evaluation completed with parsing issues",
+                        "details": {
+                            "ai_score": score,
+                            "explanation": "Score extracted from response, explanation parsing failed",
+                            "page_title": page_title,
+                            "evaluation_method": "AI-based webpage content analysis (fallback)",
+                            "raw_response": response_text
+                        }
+                    }
+                else:
+                    return 0.0, {
+                        "status": "parse_error",
+                        "message": "Could not parse AI response",
+                        "details": {
+                            "page_title": page_title,
+                            "evaluation_method": "AI-based webpage content analysis",
+                            "raw_response": response_text,
+                            "error": "No score found in response"
+                        }
+                    }
+        
+        except Exception as e:
+            return 0.0, {
+                "status": "ai_error",
+                "message": f"AI evaluation failed: {str(e)}",
+                "details": {
+                    "page_title": page_title,
+                    "evaluation_method": "AI-based webpage content analysis",
+                    "error": str(e)
+                }
             }
-        }
-        
-        # 检查URL特征
-        url_lower = url.lower()
-        url_score = 0
-        url_details = []
-        
-        for platform, info in dataset_indicators.items():
-            if any(keyword in url_lower for keyword in info['keywords']):
-                if not info['context_required'] or any(keyword in url_lower for keyword in ['dataset', 'data', 'benchmark']):
-                    url_score = max(url_score, info['weight'])  # 使用最高权重而不是累加
-                    url_details.append(f"URL matches {platform} pattern")
-        
-        # 检查页面内容特征
-        page_text = soup.get_text().lower()
-        content_score = 0
-        content_details = []
-        
-        # 数据集相关关键词及其权重
-        content_indicators = {
-            'dataset_mention': {
-                'keywords': ['dataset', 'benchmark', 'data collection', 'data repository'],
-                'weight': 3.0
-            },
-            'download_info': {
-                'keywords': ['download data', 'data files', 'data repository', 'download dataset'],
-                'weight': 2.5
-            },
-            'data_format': {
-                'keywords': ['format', 'structure', 'schema', 'csv', 'json', 'parquet'],
-                'weight': 1.5
-            },
-            'access_info': {
-                'keywords': ['access restricted', 'login required', 'registration required'],
-                'weight': 1.0
-            }
-        }
-        
-        for category, info in content_indicators.items():
-            if any(keyword in page_text for keyword in info['keywords']):
-                content_score = max(content_score, info['weight'])  # 使用最高权重而不是累加
-                content_details.append(f"Page contains {category} information")
-        
-        # 计算基础分数
-        base_score = min(max(url_score, content_score), 5)
-        
-        # 如果URL可以访问，给予额外加分
-        accessibility_bonus = 0.0
-        
-        # 计算总分（基础分数 + 可访问性加分，但不超过5）
-        total_score = min(base_score + accessibility_bonus, 5)
-        
-        return total_score, {
-            "status": "success",
-            "message": "URL is accessible",
-            "details": {
-                "url_score": url_score,
-                "content_score": content_score,
-                "accessibility_bonus": accessibility_bonus,
-                "url_details": url_details,
-                "content_details": content_details
-            }
-        }
-        
+            
     except Exception as e:
-        print(f"Error checking URL {url}: {str(e)}")
-        return 0, {
+        return 0.0, {
             "status": "error",
-            "message": f"Error: {str(e)}",
-            "details": "An unexpected error occurred during URL checking"
+            "message": f"URL processing error: {str(e)}",
+            "details": {
+                "evaluation_method": "AI-based webpage content analysis",
+                "error": str(e)
+            }
         }
 
 def normalize_url(url):
@@ -407,7 +446,7 @@ Respond with just 'DUPLICATE' or 'DIFFERENT' and no other explanation."""
         print(f"Error checking URL duplicate: {e}")
         return False
         
-def clean_and_deduplicate_urls(urls, url_context_dict=None, threshold=4, similarity_threshold=0.8):
+def clean_and_deduplicate_urls(urls, url_context_dict=None, threshold=4.5, similarity_threshold=0.8):
     # 先清洗所有输入的URL
     print("Cleaning input URLs...")
     cleaned_urls = []
@@ -523,7 +562,7 @@ def clean_and_deduplicate_urls(urls, url_context_dict=None, threshold=4, similar
     return deduplicated_urls, url_context_dict
 
 
-def verify_urls(urls, url_context_dict=None, threshold=4, similarity_threshold=0.8):
+def verify_urls(urls, url_context_dict=None, threshold=5, similarity_threshold=0.8):
     """
     验证URL列表，返回得分超过阈值的URL
     Args:
@@ -534,7 +573,6 @@ def verify_urls(urls, url_context_dict=None, threshold=4, similarity_threshold=0
     Returns:
         list: 包含验证通过的URL信息的列表，每个元素是一个字典
     """
-    
     
     verified_urls = []
     
@@ -551,10 +589,18 @@ def verify_urls(urls, url_context_dict=None, threshold=4, similarity_threshold=0
         
         # 计算总分
         total_score = llm_score + access_score
+        
+        used_threshold = threshold
+        
+        if 'success' not in access_details['status']:
+            used_threshold = threshold / 2  # 如果访问失败，降低阈值
+            print(f"Access check failed for {url}, reducing threshold to {used_threshold}")
+        else:
+            print(f"Access check succeeded for {url}, using threshold {used_threshold}")            
 
         print(f"URL: {url}, Total Score: {total_score}/10, LLM Score: {llm_score}/5, Access Score: {access_score}/5")
         # 如果总分超过阈值，添加到已验证URL列表
-        if total_score >= threshold:
+        if total_score >= used_threshold:
             verified_urls.append({
                 'url': url,
                 'score': total_score,
@@ -763,4 +809,4 @@ def main():
 if __name__ == "__main__":
     main()
     # test_urlprober()
-    
+
