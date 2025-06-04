@@ -6,15 +6,15 @@ from src.urlprober import verify_urls
 from src.main import saveJson
 
 def process_pdf_directory(pdf_dir: str, output_dir: str):
-
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     
     pdf_files = [f for f in os.listdir(pdf_dir) if f.endswith('.pdf')]
     
+    all_results = {}
+    
     skip = 0
     outdir = ''
-
     for pdf_file in pdf_files:
         pdf_path = os.path.join(pdf_dir, pdf_file)
         pdf_name = os.path.splitext(pdf_file)[0]
@@ -29,7 +29,6 @@ def process_pdf_directory(pdf_dir: str, output_dir: str):
             
         print(f"processing: {pdf_file}")
         try:
-
             if not skip:
                 outdir, mdname = process_pdf_file_to_md(pdf_path, 'en')
             if skip:
@@ -41,18 +40,43 @@ def process_pdf_directory(pdf_dir: str, output_dir: str):
             urls = dig_urls_from_text(texts)
             url_context_dict = dig_context_of_urls(texts, urls)
             
-            # 验证URL并保存结果
             verified_urls = verify_urls(urls, url_context_dict)
             
-            # 保存结果到对应的输出目录
-            output_file = os.path.join(output_dir, f"{pdf_name}_urls.json")
-            saveJson(output_file, verified_urls)
+            paper_results = {}
+            for url_info in verified_urls:
+                url = url_info.get('url', '')
+                dataset_name = url.split('/')[-1].split('.')[0]  # 从URL中提取名称
+                
+                description = ""
+                if 'llm_details' in url_info and 'details' in url_info['llm_details']:
+                    llm_details = url_info['llm_details']['details']
+                    if 'explanation' in llm_details:
+                        description = llm_details['explanation']
+                
+                source_type = "unknown" #TODO
+    
+                
+                clean_url = url.rstrip(',')
+                if not clean_url.startswith(('http://', 'https://')):
+                    clean_url = 'https://' + clean_url
+                
+                paper_results[dataset_name] = [
+                    source_type,
+                    clean_url,
+                    description
+                ]
+            
+            all_results[pdf_name] = paper_results
             
             print(f"finish: {pdf_file}, find {len(verified_urls)} valid URL")
             
         except Exception as e:
             print(f"处理 {pdf_file} 时出错: {str(e)}")
             continue
+    
+    final_output_file = os.path.join(output_dir, "all_datasets.json")
+    saveJson(final_output_file, all_results)
+    print(f"所有结果已保存到: {final_output_file}")
 
 def main():
     # 设置输入和输出目录

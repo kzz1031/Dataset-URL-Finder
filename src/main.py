@@ -6,9 +6,8 @@ from .urldigger import dig_urls_from_text, dig_context_of_urls, gather_texts
 from .urlprober import verify_urls
 import json
 
-def saveJson(filePath: str, datas: list) -> None:
-    """保存数据到JSON文件"""
-    assert isinstance(datas, list), "datas should be a list"
+def saveJson(filePath: str, datas) -> None:
+    assert isinstance(datas, (list, dict)), "datas should be a list or dict"
     directory = os.path.dirname(filePath)
     if directory and not os.path.exists(directory):
         os.makedirs(directory)
