@@ -8,3 +8,4 @@ __init__.py
 *.patch
 *.json
 课程作业论文/
+urls_text

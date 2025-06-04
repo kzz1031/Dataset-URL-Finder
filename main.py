@@ -2,8 +2,9 @@ import os
 import sys
 from src.pdfurl2md import process_pdf_file_to_md
 from src.urldigger import gather_texts, dig_urls_from_text, dig_context_of_urls
-from src.urlprober import verify_urls
+from src.urlprober import verify_urls, clean_and_deduplicate_urls
 from src.main import saveJson
+from pprint import pprint
 
 def determine_source_type(url: str) -> str:
     """根据URL确定数据源类型"""
@@ -76,6 +77,25 @@ def determine_source_type(url: str) -> str:
     else:
         return 'other'
 
+def save_urls_to_text(pdf_name: str, urls: list, output_dir: str):
+    """将verified_urls保存到文本文件"""
+    urls_dir = os.path.join(output_dir, "urls_text")
+    if not os.path.exists(urls_dir):
+        os.makedirs(urls_dir)
+    
+    text_file_path = os.path.join(urls_dir, f"{pdf_name}_urls.txt")
+    
+    with open(text_file_path, 'w', encoding='utf-8') as f:
+        for i, url in enumerate(urls, 1):
+            f.write(f"{url}\n")
+    print(f"URLs saved to: {text_file_path}")
+
+def check_urls_file_exists(pdf_name: str, output_dir: str) -> bool:
+    """检查该论文的URLs文本文件是否已存在"""
+    urls_dir = os.path.join(output_dir, "urls_text")
+    text_file_path = os.path.join(urls_dir, f"{pdf_name}_urls.txt")
+    return os.path.exists(text_file_path)
+
 def process_pdf_directory(pdf_dir: str, output_dir: str):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -89,6 +109,11 @@ def process_pdf_directory(pdf_dir: str, output_dir: str):
     for pdf_file in pdf_files:
         pdf_path = os.path.join(pdf_dir, pdf_file)
         pdf_name = os.path.splitext(pdf_file)[0]
+        
+        # 检查URLs文本文件是否已存在
+        if check_urls_file_exists(pdf_name, output_dir):
+            print(f"URLs file already exists for {pdf_file}, skipping URL extraction...")
+            continue
         
         # 检查是否已经在output目录中处理过
         output_pdf_dir = os.path.join(output_dir, pdf_name)
@@ -106,12 +131,28 @@ def process_pdf_directory(pdf_dir: str, output_dir: str):
                 print("skipping...")
                 skip = 0
 
-            print("gathering text from ", outdir)
+            deduplicated_urls = []
+            url_context_dict = {}
             texts = gather_texts(outdir, mdname)
-            urls = dig_urls_from_text(texts)
-            url_context_dict = dig_context_of_urls(texts, urls)
             
-            verified_urls = verify_urls(urls, url_context_dict)
+            if not check_urls_file_exists(pdf_name, '.'):
+                print("gathering text from ", outdir)
+                urls = dig_urls_from_text(texts)
+                url_context_dict = dig_context_of_urls(texts, urls)
+                deduplicated_urls, url_context_dict = clean_and_deduplicate_urls(urls, url_context_dict)
+                save_urls_to_text(pdf_name, deduplicated_urls, '.')
+            else:
+                print("URLs file already exists, skipping URL extraction...")
+                with open(os.path.join('.', 'urls_text', f"{pdf_name}_urls.txt"), 'r', encoding='utf-8') as f:
+                    deduplicated_urls = [line.strip() for line in f if line.strip()]
+                if deduplicated_urls:
+                    url_context_dict = dig_context_of_urls(texts, deduplicated_urls)
+            
+            pprint(url_context_dict)
+            
+            verified_urls = verify_urls(deduplicated_urls, url_context_dict)
+            
+            # 保存URLs到文本文件
             
             paper_results = {}
             for url_info in verified_urls:
@@ -138,6 +179,8 @@ def process_pdf_directory(pdf_dir: str, output_dir: str):
                 ]
             
             all_results[pdf_name] = paper_results
+            
+            pprint(paper_results)
             
             print(f"finish: {pdf_file}, find {len(verified_urls)} valid URL")
             

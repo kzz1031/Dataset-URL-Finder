@@ -67,7 +67,7 @@ def check_url_with_llm(url, context):
     
     try:
         response = chat_inst.invoke(prompt)
-        response_text = response.content.strip()
+        response_text = response.strip()
           # 解析响应
         score_match = re.search(r'Score:\s*(\d+\.?\d*)', response_text)
         explanation_match = re.search(r'Explanation:\s*(.*?)(?:\n|$)', response_text, re.DOTALL)
@@ -161,8 +161,6 @@ def check_url_accessibility(url):
     try:
         # 清理URL
         url = clean_url(url)
-        print("cleaned url:")
-        print(url)
         
         # 1. 检查URL是否可访问
         headers = {
@@ -186,6 +184,7 @@ def check_url_accessibility(url):
             try:
                 response = requests.get(url, timeout=10, headers=headers)
             except requests.exceptions.RequestException as e:
+                print(f"Error accessing URL {url}: {str(e)}")
                 return 0, {
                     "status": "error",
                     "message": f"Request failed: {str(e)}",
@@ -316,7 +315,7 @@ def check_url_accessibility(url):
         base_score = min(max(url_score, content_score), 5)
         
         # 如果URL可以访问，给予额外加分
-        accessibility_bonus = 2.0 if response.status_code == 200 else 0.0
+        accessibility_bonus = 0.0
         
         # 计算总分（基础分数 + 可访问性加分，但不超过5）
         total_score = min(base_score + accessibility_bonus, 5)
@@ -334,6 +333,7 @@ def check_url_accessibility(url):
         }
         
     except Exception as e:
+        print(f"Error checking URL {url}: {str(e)}")
         return 0, {
             "status": "error",
             "message": f"Error: {str(e)}",
@@ -406,18 +406,8 @@ Respond with just 'DUPLICATE' or 'DIFFERENT' and no other explanation."""
     except Exception as e:
         print(f"Error checking URL duplicate: {e}")
         return False
-
-def verify_urls(urls, url_context_dict=None, threshold=4, similarity_threshold=0.8):
-    """
-    验证URL列表，返回得分超过阈值的URL
-    Args:
-        urls: URL列表
-        url_context_dict: URL到上下文的映射字典
-        threshold: 分数阈值（0-10）
-        similarity_threshold: URL相似度阈值（0-1）
-    Returns:
-        list: 包含验证通过的URL信息的列表，每个元素是一个字典
-    """
+        
+def clean_and_deduplicate_urls(urls, url_context_dict=None, threshold=4, similarity_threshold=0.8):
     # 先清洗所有输入的URL
     print("Cleaning input URLs...")
     cleaned_urls = []
@@ -527,13 +517,29 @@ def verify_urls(urls, url_context_dict=None, threshold=4, similarity_threshold=0
                 duplicates.add(url1 if len(url1) > len(url2) else url2)
     
     # 构建最终的去重URL列表
-    final_urls = [url for url in unique_urls if url not in duplicates]
-    print(f"Final unique URLs after AI verification: {len(final_urls)}")
+    deduplicated_urls = [url for url in unique_urls if url not in duplicates]
+    print(f"Final unique URLs after AI verification: {len(deduplicated_urls)}")
+    
+    return deduplicated_urls, url_context_dict
+
+
+def verify_urls(urls, url_context_dict=None, threshold=4, similarity_threshold=0.8):
+    """
+    验证URL列表，返回得分超过阈值的URL
+    Args:
+        urls: URL列表
+        url_context_dict: URL到上下文的映射字典
+        threshold: 分数阈值（0-10）
+        similarity_threshold: URL相似度阈值（0-1）
+    Returns:
+        list: 包含验证通过的URL信息的列表，每个元素是一个字典
+    """
+    
     
     verified_urls = []
     
     print("Verifying URLs...")
-    for url in tqdm(final_urls):
+    for url in tqdm(urls):
         # 获取URL的上下文
         context = url_context_dict.get(url, [""])[0] if url_context_dict else ""
         
@@ -544,7 +550,7 @@ def verify_urls(urls, url_context_dict=None, threshold=4, similarity_threshold=0
         access_score, access_details = check_url_accessibility(url)
         
         # 计算总分
-        total_score = llm_score*1.2 + access_score*0.8
+        total_score = llm_score + access_score
 
         print(f"URL: {url}, Total Score: {total_score}/10, LLM Score: {llm_score}/5, Access Score: {access_score}/5")
         # 如果总分超过阈值，添加到已验证URL列表
