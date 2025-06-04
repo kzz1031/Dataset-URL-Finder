@@ -525,6 +525,9 @@ def clean_and_deduplicate_urls(urls, url_context_dict=None, threshold=4.5, simil
     # 获取去重后的URL列表
     unique_urls = list(norm_to_orig.values())
     
+    print('URLs for deduplication:', urls)
+    print('Unique URLs after deduplication:', unique_urls)
+    
     print(f"Found {len(filtered_urls)} URLs, {len(unique_urls)} unique URLs after basic deduplication")
     # print(unique_urls)
     # 对剩余的URL进行相似度比较

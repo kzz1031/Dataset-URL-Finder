@@ -5,6 +5,7 @@ from src.urldigger import gather_texts, dig_urls_from_text, dig_context_of_urls
 from src.urlprober import verify_urls, clean_and_deduplicate_urls
 from src.main import saveJson
 from pprint import pprint
+import json
 
 def determine_source_type(url: str) -> str:
     """根据URL确定数据源类型"""
@@ -96,6 +97,25 @@ def check_urls_file_exists(pdf_name: str, output_dir: str) -> bool:
     text_file_path = os.path.join(urls_dir, f"{pdf_name}_urls.txt")
     return os.path.exists(text_file_path)
 
+def check_individual_result_exists(pdf_name: str, output_dir: str) -> bool:
+    """检查该论文的个人结果JSON文件是否已存在"""
+    individual_results_dir = os.path.join(output_dir, "individual_results")
+    result_file_path = os.path.join(individual_results_dir, f"{pdf_name}_datasets.json")
+    return os.path.exists(result_file_path)
+
+def load_individual_result(pdf_name: str, output_dir: str) -> dict:
+    """加载已存在的个人结果"""
+    individual_results_dir = os.path.join(output_dir, "individual_results")
+    result_file_path = os.path.join(individual_results_dir, f"{pdf_name}_datasets.json")
+    
+    try:
+        with open(result_file_path, 'r', encoding='utf-8') as f:
+            result = json.load(f)
+            return result.get('datasets', {})
+    except Exception as e:
+        print(f"Error loading individual result for {pdf_name}: {e}")
+        return {}
+
 def process_pdf_directory(pdf_dir: str, output_dir: str):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -104,11 +124,24 @@ def process_pdf_directory(pdf_dir: str, output_dir: str):
     
     all_results = {}
     
+    # Create individual results directory
+    individual_results_dir = os.path.join(output_dir, "individual_results")
+    if not os.path.exists(individual_results_dir):
+        os.makedirs(individual_results_dir)
+    
     skip = 0
     outdir = ''
     for pdf_file in pdf_files:
         pdf_path = os.path.join(pdf_dir, pdf_file)
         pdf_name = os.path.splitext(pdf_file)[0]
+        
+        # 首先检查个人结果文件是否已存在
+        if check_individual_result_exists(pdf_name, output_dir):
+            print(f"Individual result already exists for {pdf_file}, loading existing data...")
+            paper_results = load_individual_result(pdf_name, output_dir)
+            all_results[pdf_name] = paper_results
+            print(f"Loaded {len(paper_results)} datasets from existing result for {pdf_file}")
+            continue
         
         # 检查URLs文本文件是否已存在
         if check_urls_file_exists(pdf_name, output_dir):
@@ -157,7 +190,7 @@ def process_pdf_directory(pdf_dir: str, output_dir: str):
             paper_results = {}
             for url_info in verified_urls:
                 url = url_info.get('url', '')
-                dataset_name = url.split('/')[-1].split('.')[0]
+                dataset_name = url.split('/')[-1].split('.')[0];
                 
                 description = ""
                 if 'llm_details' in url_info and 'details' in url_info['llm_details']:
@@ -178,6 +211,17 @@ def process_pdf_directory(pdf_dir: str, output_dir: str):
                     description
                 ]
             
+            # Save individual PDF results to separate JSON file
+            individual_result_file = os.path.join(individual_results_dir, f"{pdf_name}_datasets.json")
+            individual_result = {
+                "pdf_name": pdf_name,
+                "total_urls_found": len(verified_urls),
+                "datasets": paper_results,
+                "verified_urls_details": verified_urls  # Include detailed verification info
+            }
+            saveJson(individual_result_file, individual_result)
+            print(f"Individual results saved to: {individual_result_file}")
+            
             all_results[pdf_name] = paper_results
             
             pprint(paper_results)
@@ -190,6 +234,7 @@ def process_pdf_directory(pdf_dir: str, output_dir: str):
     final_output_file = os.path.join(output_dir, "all_datasets.json")
     saveJson(final_output_file, all_results)
     print(f"所有结果已保存到: {final_output_file}")
+    print(f"Individual results saved in: {individual_results_dir}")
 
 def main():
     # 设置输入和输出目录
