@@ -11,3 +11,4 @@ __init__.py
 urls_text
 logs
 **/*DS_Store*
+**/*PJ1*

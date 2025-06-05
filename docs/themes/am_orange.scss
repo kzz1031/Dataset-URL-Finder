@@ -1,0 +1,20 @@
+/* @theme am_orange */
+
+@import 'am_template';
+
+:root {
+  --color-code-bg: #fff5ec;
+  --color-coverbg: #e67e22;
+  --color-few: #3498db;
+  --color-footer: #8c8c8c;
+  --color-main: #332211;
+  --color-much: #d35400;
+  --color-navbar-bg: #fff0e0;
+  --color-navbar-font: rgb(227, 158, 158);
+  --color-quote: rgba(255, 200, 100, 0.1);
+  --color-title: rgb(255, 255, 255);
+  --color-trans: #f39c12;
+  --filter-b: brightness(30%) contrast(70%) grayscale(100%);
+  --filter-c: brightness(0%) contrast(60%) grayscale(80%);
+  --filter-e: brightness(0%) contrast(70%) grayscale(100%);
+}
