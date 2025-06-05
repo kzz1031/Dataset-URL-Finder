@@ -9,3 +9,5 @@ __init__.py
 *.json
 课程作业论文/
 urls_text
+logs
+**/*DS_Store*

@@ -65,7 +65,7 @@ def check_url_with_llm(url, context):
     
     try:
         response = chat_inst.invoke(prompt)
-        response_text = response.strip()
+        response_text = response.content.strip()
           # 解析响应
         score_match = re.search(r'Score:\s*(\d+\.?\d*)', response_text)
         explanation_match = re.search(r'Explanation:\s*(.*?)(?:\n|$)', response_text, re.DOTALL)
@@ -303,7 +303,7 @@ def check_url_accessibility(url):
 
         try:
             # 调用AI进行评估
-            response_text = chat_inst.invoke(prompt)
+            response_text = chat_inst.invoke(prompt).content.strip()
             
             # 解析AI响应
             score_match = re.search(r'Score:\s*(\d+\.?\d*)', response_text)

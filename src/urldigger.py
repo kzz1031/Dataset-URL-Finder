@@ -61,7 +61,7 @@ def filter_possible_urls(possible_urls):
             while True:
                 # Query the AI for this specific URL
                 response = chat_inst.invoke(prompt)
-                response_text = response.strip()
+                response_text = response.content.strip()
                 
                 # Check if the response indicates the URL is valid
                 if 'VALID' == response_text.upper():
